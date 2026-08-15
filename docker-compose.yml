@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    container_name: crypto-scanner-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - scanner_data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: crypto-scanner-frontend
+    # Pas de VITE_API_URL ici : Vite ne lit les variables d'env qu'au BUILD (docker
+    # build), pas à l'exécution du conteneur -> la définir dans `environment:` n'a
+    # aucun effet. L'app détecte automatiquement l'hôte de l'API à partir de celui
+    # utilisé pour charger la page (voir frontend/src/api.js), ce qui fonctionne aussi
+    # bien en localhost que depuis un iPhone via l'IP LAN du PC. Pour forcer une URL
+    # d'API précise (ex: domaine de prod), décommenter et relancer avec --build :
+    # build:
+    #   context: ./frontend
+    #   args:
+    #     VITE_API_URL: https://api.mondomaine.com
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  scanner_data:

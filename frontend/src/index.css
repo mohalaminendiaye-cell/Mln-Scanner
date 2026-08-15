@@ -1,0 +1,49 @@
+:root {
+  --bg-page: #05050a;
+  --text-1: rgba(255, 255, 255, 0.92);
+  --text-2: rgba(255, 255, 255, 0.65);
+  --text-3: rgba(255, 255, 255, 0.42);
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-bg-strong: rgba(255, 255, 255, 0.10);
+  --glass-border: rgba(255, 255, 255, 0.15);
+  --glass-border-strong: rgba(255, 255, 255, 0.30);
+  --header-bg: rgba(255, 255, 255, 0.03);
+  --accent-emerald: #6ee7b7;
+  --accent-fuchsia: #f0abfc;
+  --accent-amber: #fcd34d;
+  --accent-cyan: #67e8f9;
+}
+
+body {
+  background: var(--bg-page);
+  color: var(--text-1);
+  transition: background 0.3s ease, color 0.3s ease;
+  /* Zones de sécurité iPhone (encoche, Dynamic Island, barre de gestes) en mode PWA plein écran */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  /* Empêche le rebond/scroll élastique de tirer un fond blanc sous le contenu sur iOS */
+  overscroll-behavior-y: none;
+}
+
+/* Empêche Safari iOS de zoomer automatiquement sur les champs de saisie (font-size < 16px) */
+input, select, textarea {
+  font-size: max(16px, 1rem);
+}
+
+.scrollbar-glass::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollbar-glass::-webkit-scrollbar-thumb {
+  background: var(--glass-border-strong);
+  border-radius: 3px;
+}
+
+@keyframes floaty {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-25px); }
+}
+.orb {
+  animation: floaty 12s ease-in-out infinite;
+}

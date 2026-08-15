@@ -1,0 +1,16 @@
+fastapi==0.115.0
+starlette>=1.1.0
+# ⚠️ SÉCURITÉ : pin explicite requis suite à CVE-2026-48710 ("BadHost", contournement
+# d'authentification via header Host malformé) qui affecte Starlette < 1.0.1.
+# fastapi==0.115.0 seul ne garantit pas une version corrigée de Starlette selon la
+# résolution de dépendances pip -> pin explicite pour forcer une version saine.
+# Vérifiez `pip show starlette` après installation : doit afficher >= 1.1.0.
+uvicorn[standard]==0.30.6
+httpx==0.27.2
+pandas==2.2.2
+numpy==1.26.4
+apscheduler==3.10.4
+sqlmodel==0.0.21
+python-dotenv==1.0.1
+tenacity==8.5.0
+pydantic==2.9.2

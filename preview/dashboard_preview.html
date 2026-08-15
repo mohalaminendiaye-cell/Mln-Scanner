@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MLN Scan — Aperçu</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@500;600;700&display=swap');
+  :root {
+    --bg-page: #0a0b10;
+    --text-1: rgba(226,255,250,0.95);
+    --text-2: rgba(170,220,220,0.68);
+    --text-3: rgba(140,190,195,0.45);
+    --glass-bg: rgba(10,22,26,0.55);
+    --glass-bg-strong: rgba(14,30,34,0.75);
+    --glass-border: rgba(0,243,255,0.18);
+    --glass-border-strong: rgba(0,243,255,0.5);
+    --header-bg: rgba(8,10,16,0.7);
+    --accent-emerald: #00ff66;   /* vert matrice */
+    --accent-fuchsia: #ff0055;   /* magenta néon */
+    --accent-amber: #ffb020;     /* ambre système/alerte */
+    --accent-cyan: #00f3ff;      /* cyan électrique */
+    --grid-line: rgba(0,243,255,0.05);
+  }
+  }
+  body {
+    font-family: 'Rajdhani', 'Inter', -apple-system, sans-serif;
+    background:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px),
+      var(--bg-page);
+    background-size: 42px 42px, 42px 42px, 100%;
+    color: var(--text-1);
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  h1, h2, h3 { font-family: 'Orbitron', 'Rajdhani', sans-serif; letter-spacing: 0.02em; }
+  .neon-text { text-shadow: 0 0 8px currentColor, 0 0 18px currentColor; }
+  .cyber-glow { box-shadow: 0 0 0 1px var(--glass-border), 0 0 22px rgba(0,243,255,0.12); }
+  .cyber-glow:hover { box-shadow: 0 0 0 1px var(--glass-border-strong), 0 0 30px rgba(0,243,255,0.28); }
+  .cyber-alert {
+    border: 1px solid rgba(255,176,32,0.6);
+    background: repeating-linear-gradient(135deg, rgba(255,176,32,0.09) 0 10px, rgba(255,176,32,0.03) 10px 20px), rgba(20,15,5,0.5);
+    box-shadow: 0 0 16px rgba(255,176,32,0.25);
+    animation: cyber-pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes cyber-pulse {
+    0%, 100% { box-shadow: 0 0 12px rgba(255,176,32,0.2); border-color: rgba(255,176,32,0.45); }
+    50% { box-shadow: 0 0 22px rgba(255,176,32,0.45); border-color: rgba(255,176,32,0.85); }
+  }
+  .scrollbar-glass::-webkit-scrollbar { width: 6px; height:6px; }
+  .scrollbar-glass::-webkit-scrollbar-thumb { background: var(--glass-border-strong); border-radius: 3px; }
+  @keyframes floaty { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-25px); } }
+  .orb { animation: floaty 12s ease-in-out infinite; }
+</style>
+
+</head>
+<body class="min-h-screen relative overflow-x-hidden">
+
+<div class="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+  <div class="orb absolute w-[550px] h-[550px] rounded-full bg-cyan-500/20 blur-[130px] -top-40 -left-40"></div>
+  <div class="orb absolute w-[500px] h-[500px] rounded-full bg-[#ff0055]/15 blur-[130px] top-1/3 -right-40" style="animation-delay:-4s"></div>
+  <div class="orb absolute w-[500px] h-[500px] rounded-full bg-[#00ff66]/10 blur-[130px] -bottom-40 left-1/4" style="animation-delay:-8s"></div>
+</div>
+
+<div id="root" class="relative z-10"></div>
+
+<script>
+// =====================================================================
+// DONNÉES D'EXEMPLE (mock) — structure alignée sur les vrais modèles Pydantic
+// =====================================================================
+function genSpark(base, vol, n) {
+  n = n || 20;
+  const arr = [base];
+  for (let i = 1; i < n; i++) {
+    const last = arr[arr.length - 1];
+    arr.push(+(last * (1 + (Math.random() - 0.5) * vol)).toFixed(6));
+  }
+  return arr;
+}
+function liqZones(price) {
+  return [10, 25, 50, 100].map(lev => ({
+    leverage: lev,
+    long_price: +(price * (1 - 1 / lev)).toPrecision(6),
+    short_price: +(price * (1 + 1 / lev)).toPrecision(6),
+  }));
+}
+
+const CAT1 = [
+  { symbol: "INJUSDT", score: 84.3, direction: "Long", trigger_type: "technique+fondamental",
+    trigger_reason: "sortie de compression Bollinger (squeeze release), volume anormal (x2.8), funding extrême (0.084%)",
+    entry: 24.15, stop_loss: 22.90, take_profit: 26.65, risk_reward: 2.0,
+    rsi_h1: 68.4, chop_h4: 41.2, atr_pct: 3.2, volume_ratio: 2.8, funding_rate: 0.00084, sparkline: genSpark(23.1, 0.02) },
+  { symbol: "TIAUSDT", score: 79.1, direction: "Short", trigger_type: "technique",
+    trigger_reason: "momentum fort (RSI extrême / accélération MACD), volume anormal (x2.1)",
+    entry: 5.42, stop_loss: 5.68, take_profit: 4.90, risk_reward: 2.0,
+    rsi_h1: 24.3, chop_h4: 38.7, atr_pct: 4.1, volume_ratio: 2.1, funding_rate: -0.0002, sparkline: genSpark(5.8, 0.025) },
+];
+const CAT2 = [
+  { symbol: "ARBUSDT", score: 76.1, direction: "Neutre (Long)", trigger_type: "technique",
+    trigger_reason: "Choppiness Index H4 = 68.7 (>60), compression Bollinger -> sortie de range probable",
+    entry: 0.920, stop_loss: 0.885, take_profit: 0.965, risk_reward: 1.29,
+    rsi_h1: 51.2, chop_h4: 68.7, atr_pct: 1.4, volume_ratio: 0.7, funding_rate: 0.0001, sparkline: genSpark(0.9, 0.008) },
+];
+const CAT3 = {
+  "1h": { gainers: [["FETUSDT",3.8,1.42],["WIFUSDT",3.1,2.85],["PEPEUSDT",2.9,0.0000182]].map(x=>({symbol:x[0],change_pct:x[1],price:x[2]})),
+          losers: [["GALAUSDT",-3.2,0.031],["CHZUSDT",-2.8,0.089],["MASKUSDT",-2.5,3.22]].map(x=>({symbol:x[0],change_pct:x[1],price:x[2]})) },
+  "4h": { gainers: [["INJUSDT",8.4,24.15],["TIAUSDT",6.9,5.42],["FETUSDT",6.2,1.42]].map(x=>({symbol:x[0],change_pct:x[1],price:x[2]})),
+          losers: [["DOGEUSDT",-5.4,0.145],["GALAUSDT",-4.8,0.031],["CHZUSDT",-4.1,0.089]].map(x=>({symbol:x[0],change_pct:x[1],price:x[2]})) },
+  "daily": { gainers: [["INJUSDT",14.2,24.15],["TIAUSDT",11.8,5.42],["SUIUSDT",10.3,1.28]].map(x=>({symbol:x[0],change_pct:x[1],price:x[2]})),
+             losers: [["DOGEUSDT",-9.1,0.145],["GALAUSDT",-7.6,0.031],["CHZUSDT",-6.9,0.089]].map(x=>({symbol:x[0],change_pct:x[1],price:x[2]})) },
+  "7d": { gainers: [["INJUSDT",28.5,24.15],["TIAUSDT",24.1,5.42],["SUIUSDT",21.7,1.28]].map(x=>({symbol:x[0],change_pct:x[1],price:x[2]})),
+          losers: [["DOGEUSDT",-16.4,0.145],["GALAUSDT",-14.2,0.031],["CHZUSDT",-12.8,0.089]].map(x=>({symbol:x[0],change_pct:x[1],price:x[2]})) },
+};
+const CAT4 = [
+  { symbol: "SOLUSDT", score: 88, direction: "Long", trigger_type: "fondamental",
+    trigger_reason: "Surperforme BTC de +10.6 pts sur 24h (SOL +12.4% vs BTC +1.8%) — catalyseur propre à l'actif probable",
+    entry: 198.4, stop_loss: 189.0, take_profit: 216.0, risk_reward: 1.86,
+    rsi_h1: 66.0, chop_h4: 35.0, atr_pct: 2.8, volume_ratio: 1.9, funding_rate: 0.0003, sparkline: genSpark(180, 0.02) },
+];
+const CAT5 = [
+  { symbol: "BTCUSDT", score: 82, direction: "Short", trigger_type: "fondamental",
+    trigger_reason: "Zone de liquidation ESTIMÉE la plus proche : levier 25x à 69800 (2.3% du prix), positions Longues majoritaires (funding positif), OI notionnel ≈ 84.2M$. Autres niveaux : 10x: 75822, 50x: 69430, 100x: 69068",
+    entry: 68240, stop_loss: 69800, take_profit: 65200, risk_reward: 1.94,
+    rsi_h1: 58, chop_h4: 30, atr_pct: 1.8, volume_ratio: 1.3, funding_rate: 0.0006, sparkline: genSpark(67000, 0.01),
+    liquidation_zones: [
+      { leverage: 10, long_price: 61416, short_price: 75064 },
+      { leverage: 25, long_price: 65510, short_price: 70970 },
+      { leverage: 50, long_price: 66875, short_price: 69605 },
+      { leverage: 100, long_price: 67557, short_price: 68923 },
+    ] },
+];
+// Catégories 7/8/9 — multi-exchange OKX + Hyperliquid ("Top Movers")
+function mex(sym, exch, dir, extra) {
+  return Object.assign({
+    exchange: exch, symbol: sym, score: 78, direction: dir,
+    trigger_reason: "Compression de volatilité + volume x2.4 vs moyenne, OI +14.2%/24h",
+    entry: 1.0, stop_loss: dir === "Long" ? 0.94 : 1.06, take_profit: dir === "Long" ? 1.12 : 0.88,
+    risk_reward: 2.0, price: 1.0, volume_trend_pct: 145, open_interest_usd: 8_400_000,
+    oi_change_24h_pct: 12.5, spread_pct: 0.04,
+    liquidation_long: 0.96, liquidation_short: 1.04,
+    liquidation_zones: liqZones(1.0),
+    sparkline: genSpark(1.0, 0.02),
+  }, extra || {});
+}
+const CAT7 = {
+  OKX: [
+    mex("SOL-USDT-SWAP", "OKX", "Long", { price: 198.4, entry: 198.4, stop_loss: 189.0, take_profit: 216.0, oi_change_24h_pct: 22.1, open_interest_usd: 42_000_000 }),
+    mex("DOGE-USDT-SWAP", "OKX", "Short", { price: 0.145, entry: 0.145, stop_loss: 0.152, take_profit: 0.131, volume_trend_pct: -32, oi_change_24h_pct: -8.4 }),
+    mex("SUI-USDT-SWAP", "OKX", "Long", { price: 1.28 }),
+    mex("APT-USDT-SWAP", "OKX", "Short", { price: 7.10 }),
+    mex("TIA-USDT-SWAP", "OKX", "Long", { price: 5.42 }),
+  ],
+  Hyperliquid: [
+    mex("BTC", "Hyperliquid", "Short", { price: 68240, entry: 68240, stop_loss: 69800, take_profit: 65200, open_interest_usd: 120_000_000, oi_change_24h_pct: 8.4 }),
+    mex("ETH", "Hyperliquid", "Long", { price: 3620, entry: 3620, stop_loss: 3480, take_profit: 3900 }),
+    mex("FTM", "Hyperliquid", "Long", { price: 0.85 }),
+    mex("ARB", "Hyperliquid", "Short", { price: 0.92 }),
+    mex("OP", "Hyperliquid", "Long", { price: 1.62 }),
+  ],
+  Bybit: [
+    mex("TIAUSDT", "Bybit", "Long", { price: 5.42, entry: 5.42, stop_loss: 5.20, take_profit: 5.75, score: 82 }),
+    mex("SEIUSDT", "Bybit", "Short", { price: 0.51, score: 76 }),
+    mex("JUPUSDT", "Bybit", "Long", { price: 1.05, score: 71 }),
+  ],
+};
+const CAT8 = {
+  OKX: [
+    mex("WIF-USDT-SWAP", "OKX", "Short", { price: 2.85, entry: 2.85, stop_loss: 3.05, take_profit: 2.45, rsi_h1: 86.2, rsi_h4: 83.1, rsi_d1: 79.4,
+      trigger_reason: "RSI extrême multi-timeframe (H1:86.2 H4:83.1 D1:79.4) -> surachat, reversal short anticipé" }),
+    mex("PEPE-USDT-SWAP", "OKX", "Short", { price: 0.0000182, rsi_h1: 88.0, rsi_h4: 85.5, rsi_d1: 81.2 }),
+    mex("GALA-USDT-SWAP", "OKX", "Long", { price: 0.031, rsi_h1: 14.2, rsi_h4: 17.8, rsi_d1: 19.5 }),
+  ],
+  Hyperliquid: [
+    mex("kPEPE", "Hyperliquid", "Short", { price: 0.018, rsi_h1: 84.5, rsi_h4: 81.0, rsi_d1: 77.9 }),
+    mex("CHZ", "Hyperliquid", "Long", { price: 0.089, rsi_h1: 16.1, rsi_h4: 19.4, rsi_d1: 21.0 }),
+  ],
+  Binance: [
+    mex("DOGEUSDT", "Binance", "Short", { price: 0.145, rsi_h1: 89.1, rsi_h4: 86.4, rsi_d1: 80.7, score: 91,
+      trigger_reason: "RSI extrême multi-timeframe (H1:89.1 H4:86.4 D1:80.7) -> surachat, reversal short anticipé" }),
+    mex("1000SATSUSDT", "Binance", "Long", { price: 0.00034, rsi_h1: 12.8, rsi_h4: 15.2, rsi_d1: 18.9, score: 73 }),
+  ],
+  Bybit: [
+    mex("GALAUSDT", "Bybit", "Long", { price: 0.031, rsi_h1: 13.4, rsi_h4: 16.7, rsi_d1: 19.2, score: 77 }),
+  ],
+};
+const CAT9 = {
+  OKX: {
+    retracement_050: [
+      mex("SOL-USDT-SWAP", "OKX", "Long", { price: 198.4, entry: 198.4, stop_loss: 178.0, take_profit: 224.0, fib_level_label: "Retracement 0.50",
+        trigger_reason: "Prix en zone de Retracement 0.50 (impulsion haussière de 165.2 à 231.6 sur les 60 dernières H4)" }),
+      mex("INJ-USDT-SWAP", "OKX", "Short", { price: 24.15, fib_level_label: "Retracement 0.50" }),
+    ],
+    golden_pocket: [
+      mex("ARB-USDT-SWAP", "OKX", "Long", { price: 0.92, fib_level_label: "Golden Pocket (0.618 - 0.786)",
+        trigger_reason: "Prix en zone de Golden Pocket (0.618 - 0.786) (impulsion haussière de 0.78 à 1.15 sur les 60 dernières H4)" }),
+    ],
+  },
+  Hyperliquid: {
+    retracement_050: [
+      mex("ETH", "Hyperliquid", "Long", { price: 3620, fib_level_label: "Retracement 0.50" }),
+    ],
+    golden_pocket: [
+      mex("AVAX", "Hyperliquid", "Short", { price: 42.1, fib_level_label: "Golden Pocket (0.618 - 0.786)" }),
+      mex("LINK", "Hyperliquid", "Long", { price: 13.4, fib_level_label: "Golden Pocket (0.618 - 0.786)" }),
+    ],
+  },
+  Binance: {
+    retracement_050: [
+      mex("SUIUSDT", "Binance", "Long", { price: 1.28, fib_level_label: "Retracement 0.50", score: 80 }),
+    ],
+    golden_pocket: [
+      mex("APTUSDT", "Binance", "Short", { price: 7.10, fib_level_label: "Golden Pocket (0.618 - 0.786)", score: 74 }),
+    ],
+  },
+  Bybit: {
+    retracement_050: [],
+    golden_pocket: [
+      mex("OPUSDT", "Bybit", "Long", { price: 1.62, fib_level_label: "Golden Pocket (0.618 - 0.786)", score: 69 }),
+    ],
+  },
+};
+
+// Catégorie 10 — Global Breakout Score (Binance + Bybit), GSB >= 60
+const CAT10 = [
+  { exchange: "Binance", symbol: "INJUSDT", gsb_score: 84.2, vsi_score: 88, rvol_score: 76, oifd_score: 91, msd_score: 62, corr_score: 79,
+    direction: "Long", entry: 24.15, stop_loss: 22.90, take_profit: 27.80, risk_reward: 2.92,
+    trigger_reason: "GSB 84.2/100 -> VSI 88 (squeeze H1/H4 marqué), RVOL 76 (volume x2.6, CVD positif), OIFD 91 (OI +24% sans mouvement de prix équivalent, funding 0.084%), MSD 62 (proche VWAP, 1.1%), CORR 79 (bêta BTC 1.8, forte divergence)",
+    volume_trend_pct: 158, open_interest_usd: 42_000_000, oi_change_pct: 24.1, funding_rate: 0.00084,
+    spread_pct: 0.03, orderbook_imbalance: 0.71, beta_btc: 1.8, key_level_label: "VWAP (24 dernières H1)", key_level_distance_pct: 1.1,
+    liquidation_long: 23.18, liquidation_short: 25.12,
+    liquidation_zones: liqZones(23.1), sparkline: genSpark(23.1, 0.02) },
+  { exchange: "Bybit", symbol: "TIAUSDT", gsb_score: 79.6, vsi_score: 81, rvol_score: 74, oifd_score: 85, msd_score: 58, corr_score: 68,
+    direction: "Short", entry: 5.42, stop_loss: 5.68, take_profit: 4.85, risk_reward: 2.19,
+    trigger_reason: "GSB 79.6/100 -> VSI 81 (compression ATR faible), RVOL 74 (déséquilibre carnet vendeur), OIFD 85 (funding -0.91%, positionnement short extrême), MSD 58 (proche POC), CORR 68 (déconnexion vs BTC)",
+    volume_trend_pct: 92, open_interest_usd: 18_500_000, oi_change_pct: -14.2, funding_rate: -0.0091,
+    spread_pct: 0.04, orderbook_imbalance: 0.34, beta_btc: 0.9, key_level_label: "POC (Volume Profile)", key_level_distance_pct: 1.4,
+    liquidation_long: 5.20, liquidation_short: 5.64,
+    liquidation_zones: liqZones(5.6), sparkline: genSpark(5.6, 0.02) },
+  { exchange: "Binance", symbol: "SUIUSDT", gsb_score: 74.3, vsi_score: 79, rvol_score: 68, oifd_score: 72, msd_score: 71, corr_score: 65,
+    direction: "Long", entry: 1.28, stop_loss: 1.21, take_profit: 1.45, risk_reward: 2.43,
+    trigger_reason: "GSB 74.3/100 -> VSI 79 (Garman-Klass faible, énergie potentielle), RVOL 68, OIFD 72 (OI +18%), MSD 71 (proche plus haut 7j, 0.9%), CORR 65",
+    volume_trend_pct: 64, open_interest_usd: 12_800_000, oi_change_pct: 18.3, funding_rate: 0.00021,
+    spread_pct: 0.03, orderbook_imbalance: 0.58, beta_btc: 1.3, key_level_label: "Plus haut 7j", key_level_distance_pct: 0.9,
+    liquidation_long: 1.23, liquidation_short: 1.33,
+    liquidation_zones: liqZones(1.22), sparkline: genSpark(1.22, 0.02) },
+  { exchange: "Bybit", symbol: "ARBUSDT", gsb_score: 70.1, vsi_score: 73, rvol_score: 65, oifd_score: 69, msd_score: 66, corr_score: 74,
+    direction: "Long", entry: 0.92, stop_loss: 0.885, take_profit: 1.005, risk_reward: 2.43,
+    trigger_reason: "GSB 70.1/100 -> VSI 73, RVOL 65, OIFD 69, MSD 66 (proche VAL), CORR 74 (surperformance nette vs BTC)",
+    volume_trend_pct: 47, open_interest_usd: 7_200_000, oi_change_pct: 11.4, funding_rate: 0.00013,
+    spread_pct: 0.05, orderbook_imbalance: 0.62, beta_btc: 1.6, key_level_label: "VAL (Volume Profile)", key_level_distance_pct: 1.3,
+    liquidation_long: 0.88, liquidation_short: 0.96,
+    liquidation_zones: liqZones(0.9), sparkline: genSpark(0.9, 0.008) },
+  { exchange: "Binance", symbol: "OPUSDT", gsb_score: 67.8, vsi_score: 70, rvol_score: 62, oifd_score: 66, msd_score: 60, corr_score: 71,
+    direction: "Short", entry: 1.62, stop_loss: 1.68, take_profit: 1.48, risk_reward: 2.33,
+    trigger_reason: "GSB 67.8/100 -> VSI 70, RVOL 62, OIFD 66, MSD 60, CORR 71 (déconnexion baissière vs BTC)",
+    volume_trend_pct: 38, open_interest_usd: 5_900_000, oi_change_pct: -9.8, funding_rate: -0.00034,
+    spread_pct: 0.04, orderbook_imbalance: 0.41, beta_btc: 0.7, key_level_label: "VWAP (24 dernières H1)", key_level_distance_pct: 1.5,
+    liquidation_long: 1.56, liquidation_short: 1.68,
+    liquidation_zones: liqZones(1.6), sparkline: genSpark(1.6, 0.006) },
+];
+function renderCategory10() {
+  const cards = CAT10.map(s => {
+    const exColor = s.exchange === "Binance" ? "var(--accent-amber)" : "var(--accent-cyan)";
+    const dirColor = s.direction === "Long" ? "var(--accent-emerald)" : "var(--accent-fuchsia)";
+    const gsbColor = s.gsb_score >= 85 ? "var(--accent-emerald)" : s.gsb_score >= 75 ? "var(--accent-cyan)" : "var(--accent-amber)";
+    const subScore = (label, val) => `<div class="rounded-lg border p-1.5 text-center" style="background:var(--glass-bg-strong); border-color:var(--glass-border)"><p class="text-[9px]" style="color:var(--text-3)">${label}</p><p class="text-xs font-mono font-semibold" style="color:var(--text-1)">${val}</p></div>`;
+    return `
+    <div class="rounded-xl border p-3" style="background:var(--glass-bg); border-color:var(--glass-border)">
+      <div class="flex items-center justify-between mb-2 gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="color:${exColor}; background:${exColor}1a">${s.exchange}</span>
+          <h4 class="font-bold truncate" style="color:var(--text-1)">${s.symbol}</h4>
+        </div>
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap flex-shrink-0" style="color:${dirColor}; border-color:${dirColor}66; background:${dirColor}1a">${s.direction === "Long" ? "LONG 🟢" : "SHORT 🔴"}</span>
+      </div>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] uppercase tracking-wide" style="color:var(--text-3)">Global Breakout Score</span>
+        <div class="flex items-center gap-2">
+          <div class="w-16 h-2 rounded-full overflow-hidden" style="background:var(--glass-bg-strong)"><div class="h-full rounded-full" style="width:${s.gsb_score}%; background:${gsbColor}"></div></div>
+          <span class="font-mono font-bold text-sm" style="color:${gsbColor}">${s.gsb_score}</span>
+        </div>
+      </div>
+      ${sparklineSVG(s.sparkline, dirColor)}
+      <div class="grid grid-cols-5 gap-1 my-2">
+        ${subScore("VSI", s.vsi_score)}${subScore("RVOL", s.rvol_score)}${subScore("OIFD", s.oifd_score)}${subScore("MSD", s.msd_score)}${subScore("CORR", s.corr_score)}
+      </div>
+      <p class="text-xs mb-2" style="color:var(--text-2)">${s.trigger_reason}</p>
+      <div class="grid grid-cols-3 gap-2 text-sm mb-2">
+        <div class="rounded-lg border p-2" style="background:var(--glass-bg); border-color:var(--glass-border)"><p class="text-[10px]" style="color:var(--text-3)">Entrée</p><p class="font-mono text-xs" style="color:var(--text-1)">${s.entry}</p></div>
+        <div class="rounded-lg border border-fuchsia-400/15 bg-fuchsia-400/5 p-2"><p class="text-[10px]" style="color:var(--text-3)">SL</p><p class="font-mono text-xs" style="color:var(--accent-fuchsia)">${s.stop_loss}</p></div>
+        <div class="rounded-lg border border-emerald-400/15 bg-emerald-400/5 p-2"><p class="text-[10px]" style="color:var(--text-3)">TP</p><p class="font-mono text-xs" style="color:var(--accent-emerald)">${s.take_profit}</p></div>
+      </div>
+      <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px]" style="color:var(--text-3)">
+        <span>Vol: <span style="color:${s.volume_trend_pct>=0?'var(--accent-emerald)':'var(--accent-fuchsia)'}">+${s.volume_trend_pct}%</span></span>
+        <span>OI: $${(s.open_interest_usd/1e6).toFixed(1)}M (${s.oi_change_pct>0?'+':''}${s.oi_change_pct}%)</span>
+        <span>Spread: ${s.spread_pct}%</span>
+        <span>β BTC: ${s.beta_btc}</span>
+        <span>Niveau: ${s.key_level_label} (${s.key_level_distance_pct}%)</span>
+      </div>
+      <p class="text-[11px] mt-1" style="color:var(--text-3)">⚠️ Liq. estimées — Long: <span style="color:var(--accent-fuchsia)">${s.liquidation_long}</span> | Short: <span style="color:var(--accent-emerald)">${s.liquidation_short}</span></p>
+      ${liqZonesHTML(s.liquidation_zones)}
+    </div>`;
+  }).join("");
+  return `
+  <div class="rounded-2xl border p-5 mb-4" style="background:var(--glass-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+    <h3 class="text-lg font-bold mb-1 bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-400 bg-clip-text text-transparent">🎯 Catégorie 10 — Global Breakout Score</h3>
+    <p class="text-xs mb-3" style="color:var(--text-3)">Score composite (VSI + RVOL + OIFD + MSD + CORR) sur Binance Futures &amp; Bybit Futures — seuil GSB ≥ 60, top 5 toutes exchanges confondues.</p>
+    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">${cards}</div>
+  </div>`;
+}
+
+// Catégorie 6 — Stratégies (Stratégie 1 : Ichimoku + Volume Profile + Order Book ;
+// Stratégie 2 : ICT/SMT + VWAP). Format AssetSignal, comme Cat.1/2/4/5.
+const STRATEGIE1 = [
+  { symbol: "SOLUSDT", score: 78.4, direction: "Long", trigger_type: "technique",
+    trigger_reason: "Ichimoku Long confirmé (15m+1H) : prix au-dessus du nuage, Kijun haussière | Zone de valeur : POC à 196.80 (0.81% du prix) | CHOP(15m)=32.4 (tendance nette) | RSI(15m)=54.2 | RVOL(5m)=x2.1 | Carnet : imbalance=0.63, mur détecté à 194.20",
+    entry: 198.4, stop_loss: 192.1, take_profit: 208.3, risk_reward: 2.11,
+    rsi_h1: 54.2, chop_h4: 32.4, atr_pct: 2.4, volume_ratio: 2.1, funding_rate: null, sparkline: genSpark(196, 0.015) },
+  { symbol: "ARBUSDT", score: 71.2, direction: "Short", trigger_type: "technique",
+    trigger_reason: "Ichimoku Short confirmé (15m+1H) : prix sous le nuage, Kijun baissière | Zone de valeur : VAH à 0.928 (0.65% du prix) | CHOP(15m)=68.9 sortant de consolidation | RSI(15m)=46.8 | RVOL(5m)=x1.8 | Carnet : imbalance=0.38",
+    entry: 0.920, stop_loss: 0.945, take_profit: 0.874, risk_reward: 1.84,
+    rsi_h1: 46.8, chop_h4: 68.9, atr_pct: 1.9, volume_ratio: 1.8, funding_rate: null, sparkline: genSpark(0.93, 0.01) },
+];
+const STRATEGIE2 = [
+  { symbol: "TIAUSDT", score: 74.6, direction: "Long", trigger_type: "technique",
+    trigger_reason: "Liquidity Sweep sell-side à 5.180 (mèche à 5.142) + CHoCH confirmé + FVG retesté [5.190-5.220] + VWAP haussier (pente cohérente) + SMT Long vs BTCUSDT (BTCUSDT Lower Low / TIAUSDT Higher Low) | RVOL(5m)=x2.4 | CHOP(15m)=29.1",
+    entry: 5.205, stop_loss: 5.135, take_profit: 5.42, risk_reward: 3.10,
+    rsi_h1: 48.6, chop_h4: 29.1, atr_pct: 2.9, volume_ratio: 2.4, funding_rate: null, sparkline: genSpark(5.15, 0.02) },
+];
+
+// Bonus Trading — partie 1 (pics sociaux, ⚠️ nécessite ANTHROPIC_API_KEY)
+const SOCIAL_SPIKES = [
+  { symbol: "WIFUSDT", cause: "Rumeur de listing sur une grande exchange US relayée massivement sur X", volume_change_24h_pct: 156.0, behavior: "Squeeze", summary: "Forte hausse du volume et des mentions positives, short interest élevé avant la rumeur." },
+  { symbol: "FETUSDT", cause: "Annonce de partenariat IA avec un acteur du cloud", volume_change_24h_pct: 88.0, behavior: "Accumulation", summary: "Accumulation progressive depuis l'annonce, volume en hausse régulière sans pic brutal." },
+  { symbol: "PEPEUSDT", cause: "Vague de mèmes viraux sur X liée à une célébrité", volume_change_24h_pct: 210.0, behavior: "Prise de profit", summary: "Pic initial suivi d'un reflux, les gros portefeuilles semblent vendre dans la force." },
+];
+// Bonus Trading — partie 2 (dérivés, données Binance réelles simulées ici)
+const DERIVATIVES_TOP3 = [
+  { symbol: "TIAUSDT", oi_change_24h_pct: 34.2, funding_rate: -0.0091, price: 5.42, nearest_liquidation_zone: 5.63, zone_distance_pct: 3.9, zone_side: "Squeeze shorts",
+    reasoning: "OI en hausse de 34.2% sur 24h, funding très négatif (-0.910%) -> positionnement short fortement crowded. Zone de squeeze shorts estimée à 5.63 (3.9% du prix)." },
+  { symbol: "SEIUSDT", oi_change_24h_pct: 28.7, funding_rate: 0.0087, price: 0.51, nearest_liquidation_zone: 0.49, zone_distance_pct: 3.9, zone_side: "Squeeze longs",
+    reasoning: "OI en hausse de 28.7% sur 24h, funding très positif (0.870%) -> positionnement long fortement crowded. Zone de squeeze longs estimée à 0.49 (3.9% du prix)." },
+  { symbol: "GALAUSDT", oi_change_24h_pct: -22.1, funding_rate: 0.0076, price: 0.031, nearest_liquidation_zone: 0.0298, zone_distance_pct: 3.9, zone_side: "Squeeze longs",
+    reasoning: "OI en baisse de 22.1% (dénouement de positions), funding positif (0.760%) résiduel. Zone de squeeze longs estimée à 0.0298 (3.9% du prix)." },
+];
+// Marchés traditionnels
+const TRADITIONAL_MARKETS = [
+  { name: "DXY (Dollar Index)", ticker: "DX-Y.NYB", price: 104.32, change_pct_1d: -0.18, support: 103.1, resistance: 105.4, ma20: 104.0, ma50: 103.6, rsi: 48.2, classification: "Range neutre" },
+  { name: "Or (Gold)", ticker: "GC=F", price: 2418.5, change_pct_1d: 0.62, support: 2360.0, resistance: 2450.0, ma20: 2395.0, ma50: 2350.0, rsi: 61.4, classification: "Accumulation" },
+  { name: "Pétrole (WTI Crude)", ticker: "CL=F", price: 78.9, change_pct_1d: -1.05, support: 76.5, resistance: 82.3, ma20: 79.4, ma50: 80.1, rsi: 39.7, classification: "Range neutre" },
+  { name: "S&P 500", ticker: "^GSPC", price: 5540.2, change_pct_1d: 0.31, support: 5450.0, resistance: 5580.0, ma20: 5510.0, ma50: 5420.0, rsi: 68.9, classification: "Prise de profit" },
+  { name: "Nasdaq 100", ticker: "^NDX", price: 19820.4, change_pct_1d: 0.44, support: 19400.0, resistance: 19950.0, ma20: 19700.0, ma50: 19200.0, rsi: 70.2, classification: "Prise de profit" },
+  { name: "EUR/USD", ticker: "EURUSD=X", price: 1.0842, change_pct_1d: 0.12, support: 1.078, resistance: 1.091, ma20: 1.083, ma50: 1.080, rsi: 52.6, classification: "Squeeze" },
+];
+const ETF_FLOWS = {
+  available: true,
+  btc: [["07-21",120],["07-22",-45],["07-23",210],["07-24",80],["07-25",-30],["07-26",150],["07-27",95]].map(([d,v])=>({date:d,net_flow_usd_m:v})),
+  eth: [["07-21",25],["07-22",-10],["07-23",40],["07-24",15],["07-25",-8],["07-26",30],["07-27",22]].map(([d,v])=>({date:d,net_flow_usd_m:v})),
+  sol: [["07-21",8],["07-22",5],["07-23",-3],["07-24",12],["07-25",6],["07-26",9],["07-27",14]].map(([d,v])=>({date:d,net_flow_usd_m:v})),
+};
+
+const MOCK_NEWS = [
+  { source: "CoinDesk", title: "La SEC clarifie sa position sur la classification des tokens de gouvernance", link: "#", published: "Il y a 2h" },
+  { source: "Cointelegraph", title: "Bitcoin teste la résistance des 68 000$ alors que les flux ETF s'accélèrent", link: "#", published: "Il y a 3h" },
+  { source: "CoinDesk", title: "La Fed maintient ses taux, le marché anticipe une baisse en septembre", link: "#", published: "Il y a 5h" },
+  { source: "Cointelegraph", title: "Une grande exchange annonce le support natif du staking sur 12 nouveaux actifs", link: "#", published: "Il y a 6h" },
+  { source: "CoinDesk", title: "L'Open Interest sur les futures ETH atteint un plus haut de 3 mois", link: "#", published: "Il y a 8h" },
+  { source: "Cointelegraph", title: "Solana dépasse Ethereum en volume de transactions DEX quotidien", link: "#", published: "Il y a 10h" },
+];
+const MOCK_CALENDAR = {
+  us: [ { title: "Indice des prix à la consommation (CPI)", date: "07-29-2026", time: "8:30am", impact: "high" } ],
+  europe: [ { title: "Décision de taux BCE", date: "07-30-2026", time: "1:45pm", impact: "high" } ],
+  asie: [ { title: "Décision de taux Banque du Japon", date: "07-29-2026", time: "11:00pm", impact: "high" } ],
+};
+const MOCK_MACRO_SUMMARY = "Les marchés évoluent dans un contexte de prudence avant la publication du CPI américain et la décision de la BCE cette semaine. Le dollar (DXY) reste stable en range, l'or progresse en mode accumulation, et les actions US (S&P 500, Nasdaq) montrent des signes de prise de profit après une forte hausse. Les flux ETF Bitcoin restent globalement positifs cette semaine, soutenant la tendance de fond crypto.";
+const REGION_LABELS = { us: "🇺🇸 États-Unis", europe: "🇪🇺 Europe", asie: "🌏 Asie" };
+const DURATION_LABELS = { "1h": "1 Heure", "4h": "4 Heures", "daily": "Daily", "7d": "7 Jours" };
+const TABS = [
+  { id: "overview", label: "🏠 Vue d'ensemble" },
+  { id: "signals", label: "🎯 Signaux Techniques" },
+  { id: "movers", label: "🏆 Top Movers" },
+  { id: "watchlist", label: "⭐ Watchlist" },
+  { id: "performance", label: "📊 Performance" },
+];
+
+let currentDuration = "daily";
+let currentCalendarTab = "us";
+let activeTab = "overview";
+let watchlistItems = [{ symbol: "BTCUSDT", price: 68240 }];
+
+function sparklineSVG(data, color) {
+  if (!data || data.length < 2) return "";
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = (max - min) || 1;
+  const w = 100, h = 28;
+  const pts = data.map((v, i) => `${(i/(data.length-1)*w).toFixed(1)},${(h-((v-min)/range)*h).toFixed(1)}`).join(" ");
+  return `<svg viewBox="0 0 ${w} ${h}" class="w-full h-7" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function dirBadge(direction) {
+  const map = {
+    "Long":  "color:var(--accent-emerald); border-color:rgba(52,211,153,0.4); background:rgba(52,211,153,0.1); box-shadow:0 0 14px rgba(52,211,153,0.3)",
+    "Short": "color:var(--accent-fuchsia); border-color:rgba(232,121,249,0.4); background:rgba(232,121,249,0.1); box-shadow:0 0 14px rgba(232,121,249,0.3)",
+    "Neutre": "color:var(--accent-amber); border-color:rgba(251,191,36,0.4); background:rgba(251,191,36,0.1); box-shadow:0 0 14px rgba(251,191,36,0.3)",
+  };
+  return map[direction] || map["Neutre"];
+}
+function liqZonesHTML(zones) {
+  if (!zones || !zones.length) return "";
+  return `<div class="flex flex-wrap gap-x-3 gap-y-1 text-[10px] mt-1" style="color:var(--text-3)">${zones.map(z => `<span>${z.leverage}x: ${z.long_price} / ${z.short_price}</span>`).join("")}</div>`;
+}
+function assetCardHTML(a, rank) {
+  const funding = a.funding_rate !== null && a.funding_rate !== undefined ? `<span>Funding: ${(a.funding_rate*100).toFixed(3)}%</span>` : "";
+  const sparkColor = a.direction === "Short" ? "var(--accent-fuchsia)" : "var(--accent-emerald)";
+  return `
+  <div class="cyber-glow rounded-2xl border p-4 transition duration-300 hover:-translate-y-0.5" style="background:var(--glass-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+    <div class="flex items-center justify-between mb-2">
+      <div class="flex items-center gap-2"><span class="text-xs font-mono" style="color:var(--text-3)">#${rank}</span><h3 class="text-lg font-bold tracking-tight">${a.symbol}</h3></div>
+      <span class="text-xs font-semibold px-2.5 py-1 rounded-full border" style="${dirBadge(a.direction)}">${a.direction}</span>
+    </div>
+    <div class="mb-2">${sparklineSVG(a.sparkline, sparkColor)}</div>
+    <div class="text-sm mb-3" style="color:var(--text-3)">Score : <span style="color:var(--text-1)" class="font-semibold">${a.score}/100</span><span class="mx-2 opacity-30">•</span>R:R <span style="color:var(--text-1)" class="font-semibold">1:${a.risk_reward}</span></div>
+    <div class="mb-3"><p class="text-[11px] uppercase tracking-widest mb-1" style="color:var(--text-3)">Déclencheur (${a.trigger_type})</p><p class="text-sm leading-relaxed" style="color:var(--text-2)">${a.trigger_reason}</p></div>
+    <div class="grid grid-cols-3 gap-2 text-sm mb-3">
+      <div class="rounded-xl border p-2" style="background:var(--glass-bg); border-color:var(--glass-border)"><p class="text-[11px]" style="color:var(--text-3)">Entrée</p><p class="font-mono" style="color:var(--text-1)">${a.entry}</p></div>
+      <div class="rounded-xl border border-fuchsia-400/15 bg-fuchsia-400/5 p-2"><p class="text-[11px]" style="color:var(--text-3)">Stop Loss</p><p class="font-mono" style="color:var(--accent-fuchsia)">${a.stop_loss}</p></div>
+      <div class="rounded-xl border border-emerald-400/15 bg-emerald-400/5 p-2"><p class="text-[11px]" style="color:var(--text-3)">Take Profit</p><p class="font-mono" style="color:var(--accent-emerald)">${a.take_profit}</p></div>
+    </div>
+    <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px]" style="color:var(--text-3)"><span>RSI(H1): ${a.rsi_h1}</span><span>CHOP(H4): ${a.chop_h4}</span><span>ATR%: ${a.atr_pct}</span><span>Vol x${a.volume_ratio}</span>${funding}</div>
+    ${a.liquidation_zones ? `<div class="mt-3 pt-2 border-t text-[11px]" style="border-color:var(--glass-border); color:var(--text-3)"><p class="uppercase tracking-widest mb-1">⚠️ Zones de liquidation estimées (par levier)</p>${liqZonesHTML(a.liquidation_zones)}</div>` : ""}
+  </div>`;
+}
+
+// ---- Marchés traditionnels (regroupés par paires pour scroll horizontal) ----
+const TM_CLASS_COLOR = { "Squeeze": "var(--accent-cyan)", "Accumulation": "var(--accent-emerald)", "Prise de profit": "var(--accent-fuchsia)", "Range neutre": "var(--text-3)", "Indisponible": "var(--text-3)" };
+function traditionalMarketCard(m) {
+  const color = TM_CLASS_COLOR[m.classification] || "var(--text-3)";
+  const changeColor = (m.change_pct_1d ?? 0) >= 0 ? "var(--accent-emerald)" : "var(--accent-fuchsia)";
+  return `
+  <div class="rounded-xl border p-3" style="background:var(--glass-bg); border-color:var(--glass-border)">
+    <div class="flex items-center justify-between mb-1">
+      <p class="text-sm font-semibold" style="color:var(--text-1)">${m.name}</p>
+      <span class="text-xs px-2 py-0.5 rounded-full border" style="color:${color}; border-color:${color}66; background:${color}1a">${m.classification}</span>
+    </div>
+    <div class="flex items-baseline gap-2 mb-2">
+      <span class="text-lg font-mono" style="color:var(--text-1)">${m.price ?? "—"}</span>
+      <span class="text-xs font-mono" style="color:${changeColor}">${m.change_pct_1d>0?'+':''}${m.change_pct_1d ?? "—"}%</span>
+    </div>
+    <div class="grid grid-cols-2 gap-1 text-[11px]" style="color:var(--text-3)">
+      <span>Support: ${m.support ?? "—"}</span><span>Résistance: ${m.resistance ?? "—"}</span>
+      <span>MA20: ${m.ma20 ?? "—"}</span><span>MA50: ${m.ma50 ?? "—"}</span>
+      <span class="col-span-2">RSI: ${m.rsi ?? "—"}</span>
+    </div>
+  </div>`;
+}
+
+// Regroupement par paires logiques (Dollar+Or / Indices actions / Pétrole+EUR/USD)
+// pour permettre le scroll horizontal demandé.
+const TRADITIONAL_MARKET_GROUPS = [
+  { title: "Dollar & Or", tickers: ["DXY (Dollar Index)", "Or (Gold)"] },
+  { title: "Indices actions US", tickers: ["S&P 500", "Nasdaq 100"] },
+  { title: "Pétrole & EUR/USD", tickers: ["Pétrole (WTI Crude)", "EUR/USD"] },
+];
+function traditionalMarketsHorizontal(markets) {
+  const byName = Object.fromEntries(markets.map(m => [m.name, m]));
+  const groups = TRADITIONAL_MARKET_GROUPS.map(g => `
+    <div class="flex-shrink-0 w-80 lg:w-auto snap-start rounded-xl border p-3 space-y-3" style="border-color:var(--glass-border); background:var(--glass-bg-strong)">
+      <p class="text-xs uppercase tracking-widest" style="color:var(--text-3)">${g.title}</p>
+      ${g.tickers.map(name => byName[name] ? traditionalMarketCard(byName[name]) : "").join("")}
+    </div>`).join("");
+  return `<div class="flex gap-4 overflow-x-auto scrollbar-glass snap-x snap-mandatory pb-2 lg:grid lg:grid-cols-3 lg:overflow-visible lg:pb-0">${groups}</div>`;
+}
+
+// ---- Flux ETF (mini graphique en barres) ----
+function etfFlowChart(label, data, color) {
+  if (!data.length) return `<p class="text-sm italic" style="color:var(--text-3)">Indisponible.</p>`;
+  const max = Math.max(...data.map(d => Math.abs(d.net_flow_usd_m)), 1);
+  const bars = data.map(d => {
+    const h = Math.max(4, Math.abs(d.net_flow_usd_m) / max * 40);
+    const pos = d.net_flow_usd_m >= 0;
+    return `<div class="flex flex-col items-center justify-end" style="height:44px" title="${d.date}: ${d.net_flow_usd_m}M$">
+      <div style="height:${pos ? h : 2}px; width:10px; background:${pos ? color : 'transparent'}; border-radius:2px 2px 0 0"></div>
+      <div style="height:1px; width:100%; background:var(--glass-border)"></div>
+      <div style="height:${pos ? 2 : h}px; width:10px; background:${pos ? 'transparent' : 'var(--accent-fuchsia)'}; border-radius:0 0 2px 2px"></div>
+    </div>`;
+  }).join("");
+  const total = data.reduce((s,d)=>s+d.net_flow_usd_m,0);
+  return `
+  <div>
+    <div class="flex items-center justify-between mb-1">
+      <p class="text-xs font-semibold" style="color:var(--text-2)">${label}</p>
+      <p class="text-xs font-mono" style="color:${total>=0?'var(--accent-emerald)':'var(--accent-fuchsia)'}">${total>=0?'+':''}${total.toFixed(0)}M$ (7j)</p>
+    </div>
+    <div class="flex items-end gap-1.5">${bars}</div>
+  </div>`;
+}
+
+// ---- Vue d'ensemble : contexte marché EN PREMIER, macro EN PREMIER dans le contexte ----
+function renderOverview() {
+  const calTabs = Object.entries(REGION_LABELS).map(([key,label]) => `<button onclick="setCalTab('${key}')" class="text-xs px-3 py-1.5 rounded-full border transition" style="${key===currentCalendarTab ? 'background:linear-gradient(90deg, rgba(139,92,246,0.25), rgba(6,182,212,0.25)); border-color:var(--glass-border-strong); color:var(--text-1)' : 'border-color:var(--glass-border); color:var(--text-3)'}">${label}</button>`).join("");
+  const events = MOCK_CALENDAR[currentCalendarTab] || [];
+  const impactDot = { high: "background:#f472b6", medium: "background:#fcd34d" };
+  const evHTML = events.map(e => `<div class="flex items-center justify-between text-sm p-2.5 rounded-xl border" style="border-color:var(--glass-border)"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" style="${impactDot[e.impact]}"></span><span style="color:var(--text-2)">${e.title}</span></div><span class="text-xs" style="color:var(--text-3)">${e.date} ${e.time}</span></div>`).join("");
+  const newsHTML = MOCK_NEWS.map(n => `
+    <a href="${n.link}" target="_blank" class="cyber-glow flex-shrink-0 w-64 snap-start rounded-xl border p-3 hover:opacity-90 transition block" style="border-color:var(--glass-border); background:var(--glass-bg)">
+      <p class="text-sm leading-snug mb-2" style="color:var(--text-1)">${n.title}</p>
+      <p class="text-xs" style="color:var(--accent-cyan)">${n.source} <span style="color:var(--text-3)">• ${n.published}</span></p>
+    </a>`).join("");
+
+  return `
+  <div class="space-y-4">
+    <!-- 1. Situation macro & géopolitique — EN PREMIER -->
+    <div class="rounded-2xl border p-5" style="background:var(--glass-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+      <h3 class="font-semibold mb-2 text-fuchsia-400">🌍 Situation macro &amp; géopolitique</h3>
+      <p class="text-sm leading-relaxed" style="color:var(--text-2)">${MOCK_MACRO_SUMMARY}</p>
+    </div>
+
+    <!-- 2. Marché traditionnel (groupé par paires, scroll horizontal) -->
+    <div class="rounded-2xl border p-5" style="background:var(--glass-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+      <h3 class="font-semibold mb-3 text-cyan-400">💹 Marché traditionnel</h3>
+      <p class="text-xs mb-3 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-300 px-3 py-2">⚠️ Source Yahoo Finance (endpoint non-officiel, best-effort).<span class="lg:hidden"> Fais glisser horizontalement →</span></p>
+      ${traditionalMarketsHorizontal(TRADITIONAL_MARKETS)}
+    </div>
+
+    <!-- 3. News -->
+    <div class="rounded-2xl border p-5" style="background:var(--glass-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+      <h3 class="font-semibold mb-3 text-cyan-400">📰 Dernières news crypto</h3>
+      <div class="flex gap-3 overflow-x-auto scrollbar-glass snap-x snap-mandatory pb-2">${newsHTML}</div>
+    </div>
+
+    <!-- 4. Flux ETF -->
+    <div class="rounded-2xl border p-5" style="background:var(--glass-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+      <h3 class="font-semibold mb-1 text-violet-400">🏦 Flux ETF Bitcoin / ETH / Solana (7 derniers jours)</h3>
+      <p class="text-xs mb-3" style="color:var(--text-3)">⚠️ Compilé via recherche web (nécessite ANTHROPIC_API_KEY) — à vérifier auprès de la source (SoSoValue/Farside).</p>
+      <div class="grid md:grid-cols-3 gap-6">
+        ${etfFlowChart("Bitcoin ETF", ETF_FLOWS.btc, "var(--accent-amber)")}
+        ${etfFlowChart("Ethereum ETF", ETF_FLOWS.eth, "var(--accent-cyan)")}
+        ${etfFlowChart("Solana ETF", ETF_FLOWS.sol, "var(--accent-emerald)")}
+      </div>
+    </div>
+
+    <!-- 5. Calendrier économique -->
+    <div class="rounded-2xl border p-5" style="background:var(--glass-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+      <h3 class="font-semibold mb-3 text-violet-400">📅 Calendrier économique (7 jours)</h3>
+      <div class="flex gap-2 mb-3">${calTabs}</div>
+      <div class="space-y-1.5">${evHTML}</div>
+    </div>
+  </div>`;
+}
+function setCalTab(key) { currentCalendarTab = key; renderTabContent(); }
+
+// ---- Signaux Techniques (Cat.1/2/4/5) ----
+function categoryBlock(title, gradient, items, emptyText) {
+  const body = items && items.length ? `<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">${items.map((a,i)=>assetCardHTML(a,i+1)).join("")}</div>` : `<p class="italic" style="color:var(--text-3)">${emptyText}</p>`;
+  return `<section class="mb-10"><h2 class="text-xl font-bold mb-4 bg-gradient-to-r ${gradient} bg-clip-text text-transparent">${title}</h2>${body}</section>`;
+}
+function renderSignals() {
+  let html = "";
+  html += categoryBlock("🎯 Catégorie 1 — Probabilité de mouvement significatif (±5%/24h)", "from-cyan-400 via-[#ff0055] to-[#00ff66]", CAT1, "Aucun setup qualifié.");
+  html += categoryBlock("🌀 Catégorie 2 — Choppiness Index élevé (H4 > 60)", "from-[#ffb020] via-[#ff0055] to-cyan-400", CAT2, "Aucun setup qualifié.");
+  html += categoryBlock("🔗 Catégorie 4 — Divergence de corrélation BTC", "from-cyan-400 via-[#00ff66] to-[#ff0055]", CAT4, "Aucune divergence significative.");
+  html += categoryBlock("💧 Catégorie 5 — Zones de liquidation estimées", "from-[#ff0055] via-[#ffb020] to-cyan-400", CAT5, "Aucune zone détectée.");
+  html += `<p class="text-xs italic mb-10 -mt-6" style="color:var(--text-3)">⚠️ Zones de liquidation = estimations heuristiques (OI + niveaux de levier), pas un flux réel.</p>`;
+  html += renderStrategiesBlock();
+  html += renderBonusBlock();
+  return html;
+}
+
+// ---- Top Movers (Cat.3) ----
+function moverRow(item, isGainer) {
+  const color = isGainer ? "var(--accent-emerald)" : "var(--accent-fuchsia)";
+  const sign = item.change_pct > 0 ? "+" : "";
+  return `<div class="flex items-center justify-between text-sm p-2.5 rounded-xl border" style="background:var(--glass-bg); border-color:var(--glass-border)"><span class="font-medium" style="color:var(--text-1)">${item.symbol}</span><div class="flex items-center gap-3"><span class="text-xs font-mono" style="color:var(--text-3)">${item.price}</span><span class="font-mono font-bold" style="color:${color}">${sign}${item.change_pct}%</span></div></div>`;
+}
+function renderMovers() {
+  const bucket = CAT3[currentDuration] || { gainers: [], losers: [] };
+  const tabs = Object.entries(DURATION_LABELS).map(([key,label]) => `<button onclick="setDuration('${key}')" class="text-xs px-3 py-1.5 rounded-full border transition" style="${key===currentDuration ? 'background:linear-gradient(90deg, rgba(139,92,246,0.25), rgba(6,182,212,0.25)); border-color:var(--glass-border-strong); color:var(--text-1)' : 'border-color:var(--glass-border); color:var(--text-3)'}">${label}</button>`).join("");
+  return `<div class="flex gap-2 mb-4 flex-wrap">${tabs}</div>
+  <div class="grid md:grid-cols-2 gap-4">
+    <div><h3 class="text-sm font-semibold mb-2" style="color:var(--accent-emerald)">📈 Top 10 Gagnants</h3><div class="space-y-1.5">${bucket.gainers.map(g=>moverRow(g,true)).join("")}</div></div>
+    <div><h3 class="text-sm font-semibold mb-2" style="color:var(--accent-fuchsia)">📉 Top 10 Perdants</h3><div class="space-y-1.5">${bucket.losers.map(l=>moverRow(l,false)).join("")}</div></div>
+  </div>
+  <div class="mt-8">
+    <p class="text-xs mb-4 cyber-alert rounded-lg text-amber-300 px-4 py-3">⚠️ Intégrations OKX / Hyperliquid / Binance / Bybit : données via REST à chaque scan (pas de flux WebSocket persistant). Les zones de liquidation sont des estimations heuristiques.</p>
+    ${multiExchangeSection("🚀 Catégorie 7 — Mouvements imminents à haute probabilité (4h)", "from-emerald-400 via-cyan-400 to-violet-400", "cat7", CAT7, (ex) => CAT7[ex])}
+    ${multiExchangeSection("🌡️ Catégorie 8 — Conditions extrêmes RSI (H1 / H4 / D1)", "from-amber-400 via-fuchsia-400 to-cyan-400", "cat8", CAT8, (ex) => CAT8[ex])}
+    ${renderCategory10()}
+    ${multiExchangeFiboSection()}
+  </div>`;
+}
+function setDuration(key) { currentDuration = key; renderTabContent(); }
+
+// ---- Cat.7/8/9 : carte générique multi-exchange ----
+const MEX_EXCHANGE_COLOR = { OKX: "var(--accent-cyan)", Hyperliquid: "var(--accent-emerald)", Binance: "var(--accent-amber)", Bybit: "var(--accent-fuchsia)" };
+function mexCardHTML(s, opts) {
+  opts = opts || {};
+  const isLong = s.direction === "Long";
+  const dirColor = isLong ? "var(--accent-emerald)" : "var(--accent-fuchsia)";
+  const exColor = MEX_EXCHANGE_COLOR[s.exchange] || "var(--text-3)";
+  const oi = s.open_interest_usd != null ? `OI: $${(s.open_interest_usd/1e6).toFixed(1)}M${s.oi_change_24h_pct!=null?` (${s.oi_change_24h_pct>0?'+':''}${s.oi_change_24h_pct}%)`:''}` : '';
+  const extraLine = opts.showRsi
+    ? `<div class="flex gap-3 text-xs mb-2 font-mono" style="color:var(--accent-amber)"><span>H1: ${s.rsi_h1}</span><span>H4: ${s.rsi_h4}</span><span>D1: ${s.rsi_d1}</span></div>`
+    : opts.showFib
+    ? `<p class="text-xs mb-2 font-semibold" style="color:var(--accent-cyan)">${s.fib_level_label}</p>`
+    : '';
+  return `
+  <div class="rounded-xl border p-3" style="background:var(--glass-bg); border-color:var(--glass-border)">
+    <div class="flex items-center justify-between mb-2 gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded" style="color:${exColor}; background:${exColor}1a">${s.exchange}</span>
+        <h4 class="font-bold truncate" style="color:var(--text-1)">${s.symbol}</h4>
+      </div>
+      <span class="text-xs font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap flex-shrink-0" style="color:${dirColor}; border-color:${dirColor}66; background:${dirColor}1a">${isLong ? 'LONG 🟢' : 'SHORT 🔴'}</span>
+    </div>
+    <div class="text-sm mb-2" style="color:var(--text-3)">Score : <span style="color:var(--text-1)" class="font-semibold">${s.score}/100</span></div>
+    ${sparklineSVG(s.sparkline, dirColor)}
+    ${extraLine}
+    <p class="text-xs mb-2" style="color:var(--text-2)">${s.trigger_reason}</p>
+    <div class="grid grid-cols-3 gap-2 text-sm mb-2">
+      <div class="rounded-lg border p-2" style="background:var(--glass-bg); border-color:var(--glass-border)"><p class="text-[10px]" style="color:var(--text-3)">Entrée</p><p class="font-mono text-xs" style="color:var(--text-1)">${s.entry}</p></div>
+      <div class="rounded-lg border border-fuchsia-400/15 bg-fuchsia-400/5 p-2"><p class="text-[10px]" style="color:var(--text-3)">SL</p><p class="font-mono text-xs" style="color:var(--accent-fuchsia)">${s.stop_loss}</p></div>
+      <div class="rounded-lg border border-emerald-400/15 bg-emerald-400/5 p-2"><p class="text-[10px]" style="color:var(--text-3)">TP</p><p class="font-mono text-xs" style="color:var(--accent-emerald)">${s.take_profit}</p></div>
+    </div>
+    <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px]" style="color:var(--text-3)">
+      <span>Vol: <span style="color:${s.volume_trend_pct>=0?'var(--accent-emerald)':'var(--accent-fuchsia)'}">${s.volume_trend_pct>0?'+':''}${s.volume_trend_pct}%</span></span>
+      ${oi ? `<span>${oi}</span>` : ''}
+      ${s.spread_pct!=null ? `<span>Spread: ${s.spread_pct}%</span>` : ''}
+    </div>
+    <p class="text-[11px] mt-1" style="color:var(--text-3)">⚠️ Liq. estimées — Long: <span style="color:var(--accent-fuchsia)">${s.liquidation_long}</span> | Short: <span style="color:var(--accent-emerald)">${s.liquidation_short}</span></p>
+    ${liqZonesHTML(s.liquidation_zones)}
+  </div>`;
+}
+function mexCardGrid(items, opts, emptyText) {
+  if (!items || !items.length) return `<p class="text-sm italic" style="color:var(--text-3)">${emptyText}</p>`;
+  return `<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">${items.map(s => mexCardHTML(s, opts)).join("")}</div>`;
+}
+let activeExchange = { cat7: "OKX", cat8: "OKX", cat9: "OKX" };
+function exchangeTabsHTML(catKey, exchanges) {
+  return `<div class="flex gap-2 mb-3">${exchanges.map(ex => `
+    <button onclick="setActiveExchange('${catKey}','${ex}')" class="text-xs px-3 py-1.5 rounded-full border transition" style="${activeExchange[catKey]===ex ? 'background:linear-gradient(90deg, rgba(139,92,246,0.25), rgba(6,182,212,0.25)); border-color:var(--glass-border-strong); color:var(--text-1)' : 'border-color:var(--glass-border); color:var(--text-3)'}">${ex}</button>`).join("")}</div>`;
+}
+function setActiveExchange(catKey, ex) { activeExchange[catKey] = ex; renderTabContent(); }
+function multiExchangeSection(title, gradient, catKey, dataByExchange, getter) {
+  const exchanges = Object.keys(dataByExchange);
+  const active = activeExchange[catKey];
+  const opts = catKey === "cat8" ? { showRsi: true } : {};
+  return `
+  <div class="rounded-2xl border p-5 mb-4" style="background:var(--glass-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+    <h3 class="text-lg font-bold mb-3 bg-gradient-to-r ${gradient} bg-clip-text text-transparent">${title}</h3>
+    ${exchangeTabsHTML(catKey, exchanges)}
+    ${mexCardGrid(getter(active), opts, "Aucun signal qualifié sur cet exchange pour ce scan.")}
+  </div>`;
+}
+function multiExchangeFiboSection() {
+  const exchanges = Object.keys(CAT9);
+  const active = activeExchange.cat9;
+  const current = CAT9[active] || { retracement_050: [], golden_pocket: [] };
+  return `
+  <div class="rounded-2xl border p-5" style="background:var(--glass-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+    <h3 class="text-lg font-bold mb-3 bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-400 bg-clip-text text-transparent">📐 Catégorie 9 — Zones de retracement de Fibonacci</h3>
+    ${exchangeTabsHTML("cat9", exchanges)}
+    <div class="mb-4">
+      <h4 class="text-sm font-semibold mb-2" style="color:var(--text-2)">9.1 — Retracement 0.50</h4>
+      ${mexCardGrid(current.retracement_050, { showFib: true }, "Aucun retracement 0.50 détecté.")}
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold mb-2" style="color:var(--text-2)">9.2 — Golden Pocket (0.618 - 0.786)</h4>
+      ${mexCardGrid(current.golden_pocket, { showFib: true }, "Aucune Golden Pocket détectée.")}
+    </div>
+  </div>`;
+}
+
+// ---- Catégorie 6 : Stratégies (intégrée dans Signaux Techniques) ----
+function renderStrategiesBlock() {
+  const s1 = STRATEGIE1.length
+    ? `<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">${STRATEGIE1.map((a,i)=>assetCardHTML(a,i+1)).join("")}</div>`
+    : `<p class="italic mb-8" style="color:var(--text-3)">Aucun setup qualifié pour ce scan.</p>`;
+  const s2 = STRATEGIE2.length
+    ? `<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">${STRATEGIE2.map((a,i)=>assetCardHTML(a,i+1)).join("")}</div>`
+    : `<p class="italic" style="color:var(--text-3)">Aucun setup qualifié pour ce scan.</p>`;
+  return `<section class="mb-10">
+    <h2 class="text-xl font-bold mb-4 bg-gradient-to-r from-amber-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">🧩 Catégorie 6 — Stratégies</h2>
+    <h3 class="text-sm font-semibold mb-3" style="color:var(--text-2)">Stratégie 1 <span class="font-normal" style="color:var(--text-3)">— Ichimoku + Volume Profile + Order Book</span></h3>
+    ${s1}
+    <h3 class="text-sm font-semibold mb-3" style="color:var(--text-2)">Stratégie 2 <span class="font-normal" style="color:var(--text-3)">— ICT/SMT + VWAP</span></h3>
+    ${s2}
+  </section>`;
+}
+
+// ---- Bonus Trading (intégré dans Signaux Techniques, après la Catégorie 6) ----
+const BEHAVIOR_COLOR = { "Squeeze": "var(--accent-cyan)", "Accumulation": "var(--accent-emerald)", "Prise de profit": "var(--accent-fuchsia)", "Indéterminé": "var(--text-3)" };
+function socialSpikeCard(s) {
+  const color = BEHAVIOR_COLOR[s.behavior] || "var(--text-3)";
+  return `
+  <div class="rounded-xl border p-4" style="background:var(--glass-bg); border-color:var(--glass-border)">
+    <div class="flex items-center justify-between mb-2">
+      <h4 class="font-bold" style="color:var(--text-1)">${s.symbol}</h4>
+      <span class="text-xs px-2 py-0.5 rounded-full border" style="color:${color}; border-color:${color}66; background:${color}1a">${s.behavior}</span>
+    </div>
+    <p class="text-sm mb-1" style="color:var(--text-2)"><span style="color:var(--text-3)">Cause :</span> ${s.cause}</p>
+    <p class="text-xs mb-2" style="color:var(--text-3)">Volume 24h : <span style="color:var(--accent-emerald)">+${s.volume_change_24h_pct}%</span></p>
+    <p class="text-sm italic" style="color:var(--text-2)">${s.summary}</p>
+  </div>`;
+}
+function derivativesCard(d) {
+  const color = d.zone_side === "Squeeze longs" ? "var(--accent-fuchsia)" : "var(--accent-emerald)";
+  return `
+  <div class="rounded-xl border p-4" style="background:var(--glass-bg); border-color:var(--glass-border)">
+    <div class="flex items-center justify-between mb-2">
+      <h4 class="font-bold" style="color:var(--text-1)">${d.symbol}</h4>
+      <span class="text-xs px-2 py-0.5 rounded-full border" style="color:${color}; border-color:${color}66; background:${color}1a">${d.zone_side}</span>
+    </div>
+    <div class="grid grid-cols-3 gap-2 text-xs mb-2" style="color:var(--text-3)">
+      <span>OI 24h: <span style="color:${d.oi_change_24h_pct>=0?'var(--accent-emerald)':'var(--accent-fuchsia)'}">${d.oi_change_24h_pct>0?'+':''}${d.oi_change_24h_pct}%</span></span>
+      <span>Funding: ${(d.funding_rate*100).toFixed(3)}%</span>
+      <span>Zone: ${d.zone_distance_pct}%</span>
+    </div>
+    <p class="text-sm" style="color:var(--text-2)">${d.reasoning}</p>
+  </div>`;
+}
+function renderBonusBlock() {
+  const socialWarn = `<p class="text-xs mb-3 cyber-alert rounded-lg text-amber-300 px-4 py-3">⚠️ Recherche web via Claude — non déterministe, à vérifier. Vide si ANTHROPIC_API_KEY absente.</p>`;
+  return `
+  <section>
+    <h2 class="text-xl font-bold mb-4 bg-gradient-to-r from-[#ff0055] via-[#ffb020] to-cyan-400 bg-clip-text text-transparent">🔥 Bonus Trading</h2>
+    <h3 class="text-sm font-semibold mb-2" style="color:var(--text-2)">1. Pics d'activité sociale / recherche (6h)</h3>
+    ${socialWarn}
+    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">${SOCIAL_SPIKES.map(socialSpikeCard).join("")}</div>
+    <h3 class="text-sm font-semibold mb-2" style="color:var(--text-2)">2. Dérivés — Top 3 OI en forte hausse + funding extrême</h3>
+    <p class="text-xs mb-3" style="color:var(--text-3)">✅ Données Binance réelles (Open Interest historique + funding rate).</p>
+    <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">${DERIVATIVES_TOP3.map(derivativesCard).join("")}</div>
+  </section>`;
+}
+
+// ---- Watchlist ----
+function renderWatchlist() {
+  const list = watchlistItems.length ? `<div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3">${watchlistItems.map(item => `
+    <div class="rounded-xl border p-4 flex items-center justify-between" style="background:var(--glass-bg); border-color:var(--glass-border)">
+      <div><p class="font-bold" style="color:var(--text-1)">${item.symbol}</p><p class="text-sm font-mono" style="color:var(--text-2)">${item.price ?? "—"}</p></div>
+      <button onclick="removeWatch('${item.symbol}')" class="text-xs px-3 py-1.5 rounded-full border transition hover:opacity-80" style="border-color:var(--glass-border); color:var(--accent-fuchsia)">Retirer</button>
+    </div>`).join("")}</div>` : `<p class="italic" style="color:var(--text-3)">Aucune paire suivie.</p>`;
+  return `<h2 class="text-xl font-bold mb-4 bg-gradient-to-r from-[#ffb020] via-cyan-400 to-[#ff0055] bg-clip-text text-transparent">⭐ Ma Watchlist</h2>
+  <form onsubmit="return addWatch(event)" class="flex gap-2 mb-4">
+    <input id="watch-input" placeholder="Ex: BTC ou BTCUSDT" class="flex-1 rounded-xl border px-4 py-2.5 text-sm outline-none" style="background:var(--glass-bg); border-color:var(--glass-border); color:var(--text-1)" />
+    <button type="submit" class="rounded-xl border border-cyan-400/30 bg-gradient-to-r from-violet-500/30 to-cyan-500/30 text-white px-5 py-2.5 text-sm font-semibold transition">Ajouter</button>
+  </form>${list}`;
+}
+function addWatch(e) { e.preventDefault(); const input = document.getElementById("watch-input"); const raw = input.value.trim().toUpperCase(); if (!raw) return false; const symbol = raw.endsWith("USDT") ? raw : `${raw}USDT`; if (!watchlistItems.some(i => i.symbol === symbol)) watchlistItems.push({ symbol, price: null }); renderTabContent(); return false; }
+function removeWatch(symbol) { watchlistItems = watchlistItems.filter(i => i.symbol !== symbol); renderTabContent(); }
+
+// ---- Performance ----
+const ALL_TRADES = [
+  { id: 1, symbol: "BTCUSDT", category: "probabilite_mouvement", direction: "Long", status: "win",
+    entry: 68240, stop_loss: 66500, take_profit: 72500, exit_price: 72500,
+    opened_at: "2026-07-27T09:05:00Z", closed_at: "2026-07-27T18:30:00Z" },
+  { id: 2, symbol: "DOGEUSDT", category: "probabilite_mouvement", direction: "Short", status: "win",
+    entry: 0.145, stop_loss: 0.152, take_profit: 0.131, exit_price: 0.131,
+    opened_at: "2026-07-26T14:05:00Z", closed_at: "2026-07-27T02:10:00Z" },
+  { id: 3, symbol: "ARBUSDT", category: "chop_eleve", direction: "Neutre (Long)", status: "loss",
+    entry: 0.920, stop_loss: 0.885, take_profit: 0.965, exit_price: 0.885,
+    opened_at: "2026-07-25T21:05:00Z", closed_at: "2026-07-26T09:40:00Z" },
+  { id: 4, symbol: "OPUSDT", category: "chop_eleve", direction: "Neutre (Short)", status: "expired",
+    entry: 1.62, stop_loss: 1.58, take_profit: 1.70, exit_price: null,
+    opened_at: "2026-07-20T09:05:00Z", closed_at: "2026-07-22T09:05:00Z" },
+  { id: 5, symbol: "SUIUSDT", category: "probabilite_mouvement", direction: "Long", status: "win",
+    entry: 1.28, stop_loss: 1.21, take_profit: 1.42, exit_price: 1.42,
+    opened_at: "2026-07-10T09:05:00Z", closed_at: "2026-07-10T22:15:00Z" },
+];
+const CATEGORY_LABELS = { probabilite_mouvement: "Cat.1 Mouvement", chop_eleve: "Cat.2 Range/Chop", gsb_breakout: "Cat.10 Breakout Global (GSB)" };
+const STATUS_LABEL = { win: "TP touché", loss: "SL touché", expired: "Expiré" };
+const STATUS_COLOR = { win: "var(--accent-emerald)", loss: "var(--accent-fuchsia)", expired: "var(--accent-amber)" };
+const PERIOD_LABELS = { day: "Jour", week: "Semaine", month: "Mois", all: "Tout" };
+let perfCategoryFilter = "";
+let perfPeriodFilter = "all";
+let perfExpandedId = null;
+
+function fmtDateShort(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short", timeZone: "Africa/Dakar" });
+}
+function filteredTrades() {
+  const now = new Date("2026-07-27T09:00:00Z");
+  const periodMs = { day: 86400000, week: 7*86400000, month: 30*86400000 };
+  return ALL_TRADES.filter(t => {
+    if (perfCategoryFilter && t.category !== perfCategoryFilter) return false;
+    if (perfPeriodFilter !== "all") {
+      const openedAt = new Date(t.opened_at);
+      if (now - openedAt > periodMs[perfPeriodFilter]) return false;
+    }
+    return true;
+  });
+}
+function computeStats(trades) {
+  const total = trades.length;
+  const wins = trades.filter(t => t.status === "win").length;
+  const losses = trades.filter(t => t.status === "loss").length;
+  const expired = trades.filter(t => t.status === "expired").length;
+  const winRate = total ? Math.round(wins/total*1000)/10 : 0;
+  const byCat = {};
+  [...new Set(trades.map(t => t.category))].forEach(cat => {
+    const catTrades = trades.filter(t => t.category === cat);
+    const catWins = catTrades.filter(t => t.status === "win").length;
+    byCat[cat] = { total: catTrades.length, wins: catWins, win_rate_pct: catTrades.length ? Math.round(catWins/catTrades.length*1000)/10 : 0 };
+  });
+  return { total_closed: total, wins, losses, expired, win_rate_pct: winRate, by_category: byCat };
+}
+function setPerfCategoryFilter(v) { perfCategoryFilter = v; renderTabContent(); }
+function setPerfPeriodFilter(v) { perfPeriodFilter = v; renderTabContent(); }
+function togglePerfTrade(id) { perfExpandedId = perfExpandedId === id ? null : id; renderTabContent(); }
+
+function tradeRowHTML(t) {
+  const expanded = perfExpandedId === t.id;
+  const detail = expanded ? `
+    <div class="px-3 pb-3 pt-1 border-t" style="border-color:var(--glass-border)">
+      <div class="grid grid-cols-3 gap-2 text-sm my-2">
+        <div class="rounded-lg border p-2" style="background:var(--glass-bg-strong); border-color:var(--glass-border)"><p class="text-[10px]" style="color:var(--text-3)">Prix d'entrée</p><p class="font-mono" style="color:var(--text-1)">${t.entry}</p></div>
+        <div class="rounded-lg border border-fuchsia-400/15 bg-fuchsia-400/5 p-2"><p class="text-[10px]" style="color:var(--text-3)">Stop Loss</p><p class="font-mono" style="color:var(--accent-fuchsia)">${t.stop_loss}</p></div>
+        <div class="rounded-lg border border-emerald-400/15 bg-emerald-400/5 p-2"><p class="text-[10px]" style="color:var(--text-3)">Take Profit</p><p class="font-mono" style="color:var(--accent-emerald)">${t.take_profit}</p></div>
+      </div>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs" style="color:var(--text-3)">
+        <span>Ouvert : ${fmtDateShort(t.opened_at)}</span>
+        <span>Clôturé : ${fmtDateShort(t.closed_at)}</span>
+        ${t.exit_price != null ? `<span>Prix de sortie : <span class="font-mono" style="color:${STATUS_COLOR[t.status]}">${t.exit_price}</span></span>` : ""}
+      </div>
+    </div>` : "";
+  return `
+  <div class="rounded-lg overflow-hidden" style="background:var(--glass-bg)">
+    <button onclick="togglePerfTrade(${t.id})" class="w-full flex items-center justify-between text-sm p-2.5 hover:opacity-80 transition text-left">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="font-medium truncate" style="color:var(--text-1)">${t.symbol}</span>
+        <span class="text-xs whitespace-nowrap" style="color:var(--text-3)">${CATEGORY_LABELS[t.category] || t.category} · ${t.direction}</span>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <span class="text-xs px-2 py-0.5 rounded-full border" style="color:${STATUS_COLOR[t.status]}; border-color:${STATUS_COLOR[t.status]}66; background:${STATUS_COLOR[t.status]}1a">${STATUS_LABEL[t.status]}</span>
+        <span class="text-xs" style="color:var(--text-3)">${expanded ? "▲" : "▼"}</span>
+      </div>
+    </button>
+    ${detail}
+  </div>`;
+}
+
+function renderPerformance() {
+  const trades = filteredTrades();
+  const p = computeStats(trades);
+  const stat = (val, label, color) => `<div class="rounded-2xl border p-4 text-center" style="background:var(--glass-bg); border-color:var(--glass-border)"><p class="text-2xl font-bold" style="color:${color||'var(--text-1)'}">${val}</p><p class="text-xs mt-1" style="color:var(--text-3)">${label}</p></div>`;
+  const byCat = Object.entries(p.by_category).map(([cat, d]) => `<div class="flex items-center justify-between text-sm"><span style="color:var(--text-2)">${CATEGORY_LABELS[cat] || cat}</span><span style="color:var(--text-1)" class="font-mono">${d.win_rate_pct}% (${d.wins}/${d.total})</span></div>`).join("");
+  const categoryOptions = Object.keys(CATEGORY_LABELS).map(c => `<option value="${c}" ${perfCategoryFilter===c?'selected':''}>${CATEGORY_LABELS[c]}</option>`).join("");
+  const periodButtons = Object.entries(PERIOD_LABELS).map(([key,label]) => `
+    <button onclick="setPerfPeriodFilter('${key}')" class="text-xs px-3 py-1.5 rounded-full border transition" style="${perfPeriodFilter===key ? 'background:linear-gradient(90deg, rgba(139,92,246,0.25), rgba(6,182,212,0.25)); border-color:var(--glass-border-strong); color:var(--text-1)' : 'border-color:var(--glass-border); color:var(--text-3)'}">${label}</button>`).join("");
+
+  const body = p.total_closed > 0 ? `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">${stat(p.win_rate_pct+"%","Taux de réussite")}${stat(p.wins,"Gagnants (TP touché)","var(--accent-emerald)")}${stat(p.losses,"Perdants (SL touché)","var(--accent-fuchsia)")}${stat(p.expired,"Expirés","var(--accent-amber)")}</div>
+    ${Object.keys(p.by_category).length ? `<div class="rounded-2xl border p-5 mb-6" style="background:var(--glass-bg); border-color:var(--glass-border)"><h3 class="text-sm font-semibold mb-3" style="color:var(--text-2)">Par catégorie</h3><div class="space-y-2">${byCat}</div></div>` : ""}
+    <div class="rounded-2xl border p-5" style="background:var(--glass-bg); border-color:var(--glass-border)">
+      <h3 class="text-sm font-semibold mb-1" style="color:var(--text-2)">Signaux clôturés</h3>
+      <p class="text-xs mb-3" style="color:var(--text-3)">Clique sur un trade pour voir l'entrée, le SL et le TP.</p>
+      <div class="space-y-1.5">${trades.map(tradeRowHTML).join("")}</div>
+    </div>`
+    : `<p class="italic" style="color:var(--text-3)">Aucun signal clôturé pour ces filtres. Élargis la période ou change de catégorie.</p>`;
+
+  return `
+  <h2 class="text-xl font-bold mb-6 bg-gradient-to-r from-emerald-400 via-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">📊 Performance des signaux (backtest)</h2>
+  <div class="rounded-2xl border p-4 flex flex-wrap items-center gap-3 mb-6" style="background:var(--glass-bg); border-color:var(--glass-border)">
+    <div class="flex items-center gap-2">
+      <span class="text-xs" style="color:var(--text-3)">Catégorie :</span>
+      <select onchange="setPerfCategoryFilter(this.value)" class="text-xs rounded-lg border px-2 py-1.5 outline-none" style="background:var(--glass-bg-strong); border-color:var(--glass-border); color:var(--text-1)">
+        <option value="" ${perfCategoryFilter===""?'selected':''}>Toutes</option>
+        ${categoryOptions}
+      </select>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-xs" style="color:var(--text-3)">Période :</span>
+      <div class="flex gap-1">${periodButtons}</div>
+    </div>
+  </div>
+  ${body}`;
+}
+
+// ---- Rendu principal ----
+function renderTabContent() {
+  let html = "";
+  switch (activeTab) {
+    case "overview": html = renderOverview(); break;
+    case "signals": html = renderSignals(); break;
+    case "movers": html = renderMovers(); break;
+    case "watchlist": html = renderWatchlist(); break;
+    case "performance": html = renderPerformance(); break;
+  }
+  document.getElementById("tab-content").innerHTML = html;
+}
+function renderTabs() {
+  document.getElementById("tabs-bar").innerHTML = TABS.map(t => `
+    <button onclick="setTab('${t.id}')" class="whitespace-nowrap px-4 py-2.5 rounded-t-xl text-sm font-semibold transition border-b-2"
+      style="border-color:${t.id===activeTab ? '#22d3ee' : 'transparent'}; color:${t.id===activeTab ? 'var(--text-1)' : 'var(--text-3)'}">
+      ${t.label}
+    </button>`).join("");
+}
+function setTab(id) { activeTab = id; renderTabs(); renderTabContent(); }
+
+document.getElementById("root").innerHTML = `
+  <header class="border-b px-6 py-5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20" style="background:var(--header-bg); border-color:var(--glass-border); backdrop-filter:blur(20px)">
+    <div>
+      <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-400 via-[#ff0055] to-[#00ff66] bg-clip-text text-transparent" style="filter: drop-shadow(0 0 14px rgba(0,243,255,0.35))">⚡ MLN SCAN</h1>
+      <p class="text-sm mt-1" style="color:var(--text-3)">Scans automatiques (Binance Futures + contexte marché) à 01h • 09h • 14h • 17h • 21h GMT</p>
+    </div>
+    <div class="flex gap-2">
+      <button class="rounded-xl border px-4 py-2 text-sm font-semibold transition hover:opacity-80" style="border-color:var(--glass-border); background:var(--glass-bg); color:var(--text-1)">Tester Telegram</button>
+      <button class="rounded-xl border border-cyan-400/30 bg-gradient-to-r from-violet-500/30 to-cyan-500/30 text-white px-4 py-2 text-sm font-semibold transition">Lancer un scan manuel</button>
+    </div>
+    <div class="cyber-alert rounded-lg text-amber-300 text-xs px-4 py-3 max-w-lg w-full">
+      ⚠️ Aperçu statique. Les sections marquées ⚠️ dans l'app réelle nécessitent une clé ANTHROPIC_API_KEY (pics sociaux, flux ETF) — sinon elles restent vides plutôt que d'inventer des données.
+    </div>
+  </header>
+  <div class="p-6 max-w-[1500px] mx-auto">
+    <div id="tabs-bar" class="flex gap-2 overflow-x-auto scrollbar-glass mb-6 pb-1 border-b" style="border-color:var(--glass-border)"></div>
+    <div id="tab-content"></div>
+  </div>
+`;
+
+renderTabs();
+renderTabContent();
+</script>
+</body>
+</html>
