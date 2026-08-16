@@ -1,5 +1,5 @@
 fastapi==0.115.0
-starlette>=1.1.0
+
 # ⚠️ SÉCURITÉ : pin explicite requis suite à CVE-2026-48710 ("BadHost", contournement
 # d'authentification via header Host malformé) qui affecte Starlette < 1.0.1.
 # fastapi==0.115.0 seul ne garantit pas une version corrigée de Starlette selon la
