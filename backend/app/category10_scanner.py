@@ -54,43 +54,24 @@ def _klines_to_df(raw: list[list]) -> pd.DataFrame:
     return df
 
 
-async def _fetch_bundle(exchange: str, client, symbol: str, cache_entry: dict | None = None) -> dict | None:
-    """`cache_entry` : données déjà récupérées pour ce symbole par le scan Cat.1/2
-    (mêmes timeframes 1h/4h + funding + OI) -> si présent (uniquement possible pour
-    Binance, Bybit n'ayant pas de scan Cat.1/2 équivalent), on réutilise ces données
-    au lieu de refaire 4 appels réseau (klines 1h, klines 4h, funding, OI)."""
+async def _fetch_bundle(exchange: str, client, symbol: str) -> dict | None:
     try:
-        if cache_entry is not None:
-            # Réutilisation : h1_raw de Cat.1/2 est fetché avec limit=200, on garde les
-            # 150 dernières bougies pour matcher exactement ce que Cat.10 demande.
-            # h4_raw est fetché avec limit=100 des deux côtés -> réutilisation directe.
-            h1_raw = cache_entry["h1_raw"][-150:]
-            h4_raw = cache_entry["h4_raw"]
-            funding = cache_entry["funding"]
-            oi_usd = cache_entry["open_interest"]
-            d1_raw, oi_change, imbalance, spread = await asyncio.gather(
-                client.get_klines(symbol, "1d", limit=10),
-                client.get_open_interest_change_pct(symbol, hours=4),  # cohérent avec price_change_4h dans _score_oifd
-                client.get_orderbook_imbalance(symbol),
-                client.get_spread_pct(symbol),
-            )
-        else:
-            h1_raw, h4_raw, d1_raw = await asyncio.gather(
-                client.get_klines(symbol, "1h", limit=150),
-                client.get_klines(symbol, "4h", limit=100),
-                client.get_klines(symbol, "1d", limit=10),
-            )
-            if exchange == "Binance":
-                funding = await client.get_funding_rate(symbol)
-                oi_usd = await client.get_open_interest(symbol)
-                oi_change = await client.get_open_interest_change_pct(symbol, hours=4)
-                imbalance = await client.get_orderbook_imbalance(symbol)
-                spread = await client.get_spread_pct(symbol)
-            else:  # Bybit
-                funding = await client.get_funding_rate(symbol)
-                oi_usd, oi_change = await client.get_open_interest_change_pct(symbol, hours=4)
-                imbalance = await client.get_orderbook_imbalance(symbol)
-                spread = await client.get_spread_pct(symbol)
+        h1_raw, h4_raw, d1_raw = await asyncio.gather(
+            client.get_klines(symbol, "1h", limit=150),
+            client.get_klines(symbol, "4h", limit=100),
+            client.get_klines(symbol, "1d", limit=10),
+        )
+        if exchange == "Binance":
+            funding = await client.get_funding_rate(symbol)
+            oi_usd = await client.get_open_interest(symbol)
+            oi_change = await client.get_open_interest_change_pct(symbol, hours=4)  # cohérent avec price_change_4h dans _score_oifd
+            imbalance = await client.get_orderbook_imbalance(symbol)
+            spread = await client.get_spread_pct(symbol)
+        else:  # Bybit
+            funding = await client.get_funding_rate(symbol)
+            oi_usd, oi_change = await client.get_open_interest_change_pct(symbol, hours=4)
+            imbalance = await client.get_orderbook_imbalance(symbol)
+            spread = await client.get_spread_pct(symbol)
     except Exception as e:
         logger.warning(f"{exchange} {symbol}: erreur de récupération ignorée -> {e}")
         return None
@@ -250,34 +231,20 @@ def _build_trade_plan(price: float, atr_val: float, direction: str):
     return round(entry, 8), round(sl, 8), round(tp, 8), round(rr, 2)
 
 
-async def _scan_exchange_for_gsb(
-    exchange: str,
-    client,
-    btc_h1_returns: pd.Series | None,
-    klines_cache: dict | None = None,
-    perpetuals: set | None = None,
-    tickers: list | None = None,
-) -> list[Category10Signal]:
+async def _scan_exchange_for_gsb(exchange: str, client, btc_h1_returns: pd.Series | None) -> list[Category10Signal]:
     try:
-        # perpetuals/tickers ne sont utiles que pour Binance : Bybit a son propre
-        # univers de symboles et son propre client, sans équivalent au snapshot Binance.
-        kwargs = {"perpetuals": perpetuals, "tickers": tickers} if exchange == "Binance" else {}
         symbols = await client.get_top_symbols_by_volume(
-            settings.CATEGORY10_TOP_N_SYMBOLS, settings.CATEGORY10_MIN_QUOTE_VOLUME, **kwargs
+            settings.CATEGORY10_TOP_N_SYMBOLS, settings.CATEGORY10_MIN_QUOTE_VOLUME
         )
     except Exception as e:
         logger.warning(f"{exchange}: impossible de lister les symboles pour la Cat.10 -> {e}")
         return []
 
     sem = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
-    cache = klines_cache or {}
 
     async def fetch(sym):
         async with sem:
-            # Le cache Cat.1/2 (h1/h4/funding/OI) n'est valable que côté Binance -
-            # Bybit n'a pas de source équivalente à réutiliser.
-            cache_entry = cache.get(sym) if exchange == "Binance" else None
-            return await _fetch_bundle(exchange, client, sym, cache_entry)
+            return await _fetch_bundle(exchange, client, sym)
 
     bundles = [b for b in await asyncio.gather(*(fetch(s) for s in symbols)) if b is not None]
 
@@ -369,26 +336,15 @@ async def _scan_exchange_for_gsb(
     return signals
 
 
-async def build_category10(
-    klines_cache: dict | None = None,
-    perpetuals: set | None = None,
-    tickers: list | None = None,
-) -> tuple[list[Category10Signal], list[str]]:
+async def build_category10() -> tuple[list[Category10Signal], list[str]]:
     """Point d'entrée appelé par scanner.run_scan(). Retourne le top 5 GSB
-    TOUTES EXCHANGES CONFONDUES (Binance + Bybit), filtré à GSB >= seuil.
-
-    `klines_cache`, `perpetuals`, `tickers` : données déjà récupérées par le scan
-    Cat.1/2 pour ce cycle, réutilisées côté Binance uniquement (même exchange, mêmes
-    timeframes 1h/4h) pour réduire le poids API consommé -> voir scanner.run_scan."""
+    TOUTES EXCHANGES CONFONDUES (Binance + Bybit), filtré à GSB >= seuil."""
     errors: list[str] = []
     all_signals: list[Category10Signal] = []
 
     async with BinanceFuturesClient() as binance_client:
         try:
-            binance_signals = await _scan_exchange_for_gsb(
-                "Binance", binance_client, None,
-                klines_cache=klines_cache, perpetuals=perpetuals, tickers=tickers,
-            )
+            binance_signals = await _scan_exchange_for_gsb("Binance", binance_client, None)
             all_signals += binance_signals
         except Exception as e:
             logger.exception("Échec complet du scan Binance pour la Catégorie 10")
