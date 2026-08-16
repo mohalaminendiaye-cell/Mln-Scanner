@@ -32,19 +32,16 @@ from .binance_client import BinanceFuturesClient, BinanceAPIError
 from .config import settings
 from .indicators import enrich_dataframe, choppiness_index, liquidation_zones_multi, closest_liquidation_zone
 from .models import (
-    AssetSignal, ScanResult, GainerLoserItem, DurationBucket,
+    AssetSignal, ScanResult,
     DerivativesAltcoin, BonusTrading, LiquidationZone,
 )
 from . import ai_research
-from .multi_exchange_scanner import build_categories_7_8_9
+from .multi_exchange_scanner import build_categories_7_9
 from .category10_scanner import build_category10
 from .category11_scanner import build_category11
 from .strategies_scanner import build_category6_strategies
 
 logger = logging.getLogger("scanner")
-
-# Durées proposées pour la Catégorie 3, exprimées en nombre de bougies H1 de recul
-GAINERS_LOSERS_DURATIONS = {"1h": 1, "4h": 4, "daily": 24, "7d": 168}
 
 
 def _klines_to_df(raw: list[list]) -> pd.DataFrame:
@@ -91,9 +88,6 @@ async def _fetch_symbol_data(client: BinanceFuturesClient, symbol: str) -> dict 
     return {
         "symbol": symbol, "h1": df_h1, "h4": df_h4,
         "funding": funding, "open_interest": open_interest, "oi_change_pct": oi_change_pct,
-        # Klines brutes (format Binance natif) conservées pour être réutilisées par
-        # Cat.10 (mêmes timeframes 1h/4h) sans refaire l'appel réseau -> voir build_category10.
-        "h1_raw": h1_raw, "h4_raw": h4_raw,
     }
 
 
@@ -249,33 +243,6 @@ def _score_category2(data: dict) -> tuple[float, float] | None:
     return last_chop, score
 
 
-def _build_gainers_losers(results: list[dict | None]) -> dict[str, DurationBucket]:
-    """Construit, pour chaque durée (1h/4h/daily/7d), le top 10 gagnants et top 10 perdants
-    parmi les paires analysées, à partir de la variation de clôture H1."""
-    buckets: dict[str, DurationBucket] = {}
-    for key, periods_back in GAINERS_LOSERS_DURATIONS.items():
-        changes = []
-        for data in results:
-            if data is None:
-                continue
-            close = data["h1"]["close"]
-            if len(close) <= periods_back:
-                continue
-            pct = float((close.iloc[-1] / close.iloc[-1 - periods_back] - 1) * 100)
-            changes.append(
-                GainerLoserItem(
-                    symbol=data["symbol"],
-                    change_pct=round(pct, 2),
-                    price=float(close.iloc[-1]),
-                )
-            )
-        changes_sorted = sorted(changes, key=lambda x: x.change_pct, reverse=True)
-        gainers = changes_sorted[:10]
-        losers = list(reversed(changes_sorted[-10:])) if changes_sorted else []
-        buckets[key] = DurationBucket(gainers=gainers, losers=losers)
-    return buckets
-
-
 def _build_correlation_signals(results: list[dict | None], btc_change_pct: float) -> list[AssetSignal]:
     """Catégorie 4 : altcoins dont la variation 24h diverge le plus de celle de BTC.
     Une forte divergence (positive ou négative) suggère un catalyseur propre à l'actif
@@ -321,89 +288,6 @@ def _build_correlation_signals(results: list[dict | None], btc_change_pct: float
                 volume_ratio=round(float(last["vol_ratio"]), 2),
                 funding_rate=data["funding"],
                 sparkline=[round(v, 8) for v in h1["close"].tail(24).tolist()],
-            )
-        )
-    return sorted(candidates, key=lambda c: c.score, reverse=True)[:5]
-
-
-def _estimate_liquidation_zones(results: list[dict | None]) -> list[AssetSignal]:
-    """Catégorie 5 : zones de liquidation ESTIMÉES par heuristique (Open Interest + niveaux
-    de levier courants LIQUIDATION_LEVERAGE_LEVELS = 10x/25x/50x/100x), PAS un flux de
-    liquidations réel (non disponible publiquement sans données order-book complètes).
-    Sert d'indication de zones "aimants" probables où le prix pourrait être attiré par
-    des cascades de liquidation. Les 4 niveaux sont calculés et exposés (`liquidation_zones`) ;
-    le niveau retenu pour le plan de trade est celui dont la zone est LA PLUS PROCHE du
-    prix actuel (donc la plus vraisemblable à court terme), plutôt qu'un levier fixe."""
-    candidates = []
-    for data in results:
-        if data is None or data.get("open_interest") is None:
-            continue
-        h1 = data["h1"]
-        last = h1.iloc[-1]
-        if len(h1) < 20 or last[["atr"]].isna().any():
-            continue
-        price = float(last["close"])
-        atr_val = float(last["atr"])
-
-        zones = liquidation_zones_multi(price, settings.LIQUIDATION_LEVERAGE_LEVELS)
-
-        # Biais : funding positif => plus de positions longues => cascade de liquidations
-        # longues plus probable si le prix baisse vers une zone "long" (donc biais Short/attraction bas)
-        funding = data["funding"] or 0.0
-        side = "short" if funding > 0 else "long"
-        closest = closest_liquidation_zone(zones, price, side)
-        target_zone = closest["short_price"] if side == "short" else closest["long_price"]
-        leverage = closest["leverage"]
-        if funding > 0:
-            direction, reason_dir = "Short", "positions Longues majoritaires (funding positif)"
-        else:
-            direction, reason_dir = "Long", "positions Courtes majoritaires (funding négatif/nul)"
-
-        distance_pct = abs(price - target_zone) / price * 100
-        oi_value = data["open_interest"] * price  # notionnel approximatif en USDT
-        # Score : zone proche + OI élevé (donc cascade potentiellement plus large)
-        proximity_score = max(0.0, 1 - distance_pct / 8)
-        oi_score = min(oi_value / 50_000_000, 1.0)  # normalisé, plafonné à 50M$
-        score = round((0.6 * proximity_score + 0.4 * oi_score) * 100, 2)
-        if score <= 0:
-            continue
-
-        entry = price
-        stop_loss = price - 1.2 * atr_val if direction == "Long" else price + 1.2 * atr_val
-        take_profit = target_zone
-        risk = abs(entry - stop_loss)
-        rr = round(abs(take_profit - entry) / risk, 2) if risk else 0
-        if rr < 1.2:  # seuil assoupli : ce sont des zones d'attraction, pas des setups momentum classiques
-            continue
-
-        other_levels = ", ".join(
-            f"{z['leverage']}x: {z['short_price' if side == 'short' else 'long_price']:.6g}"
-            for z in zones if z["leverage"] != leverage
-        )
-        candidates.append(
-            AssetSignal(
-                symbol=data["symbol"],
-                category="liquidations",
-                score=score,
-                trigger_type="fondamental",
-                trigger_reason=(
-                    f"Zone de liquidation ESTIMÉE la plus proche : levier {leverage}x à {target_zone:.6g} "
-                    f"({distance_pct:.1f}% du prix actuel), {reason_dir}, "
-                    f"OI notionnel ≈ {oi_value/1_000_000:.1f}M$. Autres niveaux : {other_levels}"
-                ),
-                direction=direction,
-                entry=round(entry, 6),
-                stop_loss=round(stop_loss, 6),
-                take_profit=round(take_profit, 6),
-                risk_reward=rr,
-                price=price,
-                atr_pct=round(float(last["atr_pct"]), 3),
-                rsi_h1=round(float(last["rsi"]), 2),
-                chop_h4=round(float(data["h4"]["chop"].iloc[-1]), 2),
-                volume_ratio=round(float(last["vol_ratio"]), 2),
-                funding_rate=funding,
-                sparkline=[round(v, 8) for v in h1["close"].tail(24).tolist()],
-                liquidation_zones=[LiquidationZone(**z) for z in zones],
             )
         )
     return sorted(candidates, key=lambda c: c.score, reverse=True)[:5]
@@ -474,13 +358,7 @@ async def run_scan() -> ScanResult:
     errors: list[str] = []
     async with BinanceFuturesClient() as client:
         try:
-            # Snapshot marché (exchangeInfo + ticker/24hr) récupéré UNE SEULE FOIS pour
-            # tout le cycle de scan, puis réutilisé par Cat.1/2 (ici) ET transmis à Cat.10
-            # et Cat.11 plus bas -> évite de refaire ces 2 appels (poids ~41) à 3 reprises.
-            perpetuals, tickers = await client.get_market_snapshot()
-            symbols = await client.get_top_symbols_by_volume(
-                settings.TOP_N_SYMBOLS, perpetuals=perpetuals, tickers=tickers
-            )
+            symbols = await client.get_top_symbols_by_volume(settings.TOP_N_SYMBOLS)
         except Exception as e:
             logger.error(f"Impossible de récupérer la liste des symboles: {e}")
             raise
@@ -598,13 +476,7 @@ async def run_scan() -> ScanResult:
         reverse=True,
     )[:5]
 
-    # Cache klines brutes {symbole: data} pour les symboles déjà fetchés par Cat.1/2 -
-    # réutilisé par Cat.10 (mêmes timeframes 1h/4h) pour éviter les appels réseau redondants.
-    klines_cache = {d["symbol"]: d for d in results if d is not None}
-
-    cat3_final = _build_gainers_losers(results)
     cat4_final = _build_correlation_signals(results, btc_change_pct)
-    cat5_final = _estimate_liquidation_zones(results)
 
     cat6_final, cat6_errors = await build_category6_strategies(results)
     errors.extend(cat6_errors)
@@ -624,23 +496,21 @@ async def run_scan() -> ScanResult:
         derivatives_top3=derivatives_top3,
     )
 
-    # Catégories 7/8/9 : analyse multi-exchange OKX + Hyperliquid (Top Movers).
-    # Exécutée en dernier et isolée dans son propre try/except : un problème sur
-    # OKX/Hyperliquid ne doit jamais faire échouer le reste du scan Binance.
+    # Catégories 7/9 : analyse multi-exchange (Top Movers). Exécutée en dernier et
+    # isolée dans son propre try/except : un problème sur OKX/Bybit ne doit jamais
+    # faire échouer le reste du scan Binance.
     try:
-        cat7_final, cat8_final, cat9_final, multi_exchange_errors = await build_categories_7_8_9()
+        cat7_final, cat9_final, multi_exchange_errors = await build_categories_7_9()
         errors.extend(multi_exchange_errors)
     except Exception as e:
-        logger.exception("Échec complet des Catégories 7/8/9 (OKX/Hyperliquid)")
-        errors.append(f"Catégories 7/8/9 (multi-exchange): {e}")
-        cat7_final, cat8_final, cat9_final = {}, {}, {}
+        logger.exception("Échec complet des Catégories 7/9 (multi-exchange)")
+        errors.append(f"Catégories 7/9 (multi-exchange): {e}")
+        cat7_final, cat9_final = {}, {}
 
     # Catégorie 10 : Global Breakout Score (Binance + Bybit), isolée dans son
     # propre try/except pour ne jamais faire échouer le reste du scan.
     try:
-        cat10_final, cat10_errors = await build_category10(
-            klines_cache=klines_cache, perpetuals=perpetuals, tickers=tickers
-        )
+        cat10_final, cat10_errors = await build_category10()
         errors.extend(cat10_errors)
     except Exception as e:
         logger.exception("Échec complet de la Catégorie 10 (GSB)")
@@ -649,7 +519,7 @@ async def run_scan() -> ScanResult:
 
     # Catégorie 11 : Scalping IA (Grok), isolée dans son propre try/except.
     try:
-        cat11_final, cat11_errors = await build_category11(perpetuals=perpetuals, tickers=tickers)
+        cat11_final, cat11_errors = await build_category11()
         errors.extend(cat11_errors)
     except Exception as e:
         logger.exception("Échec complet de la Catégorie 11 (Scalping IA)")
@@ -660,13 +530,10 @@ async def run_scan() -> ScanResult:
         timestamp=datetime.now(timezone.utc),
         category1=cat1_final,
         category2=cat2_final,
-        category3=cat3_final,
         category4=cat4_final,
-        category5=cat5_final,
         category6=cat6_final,
         bonus_trading=bonus_trading,
         category7=cat7_final,
-        category8=cat8_final,
         category9=cat9_final,
         category10=cat10_final,
         category11=cat11_final,
