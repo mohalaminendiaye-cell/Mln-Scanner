@@ -17,7 +17,8 @@ if settings.DATABASE_URL.startswith("sqlite:///"):
     if _db_dir:
         os.makedirs(_db_dir, exist_ok=True)
 
-engine = create_engine(settings.DATABASE_URL, connect_args={"check_same_thread": False})
+_connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+engine = create_engine(settings.DATABASE_URL, connect_args=_connect_args)
 
 
 class ScanRecord(SQLModel, table=True):
