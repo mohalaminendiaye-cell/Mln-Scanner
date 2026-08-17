@@ -185,6 +185,10 @@ async def trigger_scan():
             raise HTTPException(status_code=502, detail="Erreur lors du scan (API externe indisponible). Voir les logs serveur.")
 
         scan_id = save_scan(result.model_dump_json(), result.timestamp, result.symbols_analyzed)
+        record_signal_outcomes(scan_id, result.category1, "probabilite_mouvement")
+        record_signal_outcomes(scan_id, result.category2, "chop_eleve")
+        cat10_qualified = [s for s in result.category10 if not s.is_fallback]
+        record_signal_outcomes(scan_id, cat10_qualified, "gsb_breakout")
         await send_all_notifications(result)
         return {"id": scan_id, **result.model_dump()}
 
