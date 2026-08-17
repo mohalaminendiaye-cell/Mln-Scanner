@@ -28,7 +28,7 @@ from .database import (
     init_db, save_scan, get_history, get_scan_by_id, get_latest_scan,
     add_to_watchlist, remove_from_watchlist, get_watchlist,
     get_backtest_stats, get_recent_outcomes, get_backtest_categories,
-    record_signal_outcomes,
+    record_signal_outcomes, purge_old_scans,
 )
 from .binance_client import BinanceFuturesClient
 from .scanner import run_scan
